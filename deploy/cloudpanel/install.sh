@@ -71,6 +71,12 @@ if ! grep -qE '^SECRET_KEY=.+' "$APP/.env"; then
   sed -i '/^SECRET_KEY=/d' "$APP/.env"
   echo "SECRET_KEY=$("$PYTHON" -c 'import secrets; print(secrets.token_urlsafe(48))')" >> "$APP/.env"
 fi
+NEW_ADMIN_PW=""
+if ! grep -qE '^ADMIN_PASSWORD=.+' "$APP/.env"; then   # sign-in for /admin
+  sed -i '/^ADMIN_PASSWORD=/d' "$APP/.env"
+  NEW_ADMIN_PW="$("$PYTHON" -c 'import secrets; print(secrets.token_urlsafe(18))')"
+  echo "ADMIN_PASSWORD=$NEW_ADMIN_PW" >> "$APP/.env"
+fi
 chown "$SITE_USER:$GROUP" "$APP/.env"; chmod 600 "$APP/.env"
 APP_PORT="$(grep -E '^APP_PORT=' "$APP/.env" | tail -1 | cut -d= -f2-)"
 
@@ -88,6 +94,14 @@ supervisorctl restart happyhacks
 
 # the "sudo happyhacks-deploy" command: a copy of deploy.sh, refreshed on every install/update
 install -m 755 "$APP/deploy/cloudpanel/deploy.sh" /usr/local/sbin/happyhacks-deploy
+
+# "Update live site" on /admin: the app's user may run exactly this one command as root, nothing else
+SUDOERS_TMP="$(mktemp)"
+printf '%s\n' "# written by happyhacks' install.sh: lets /admin run the deploy (happyhacks/selfupdate.py)" \
+  "$SITE_USER ALL=(root) NOPASSWD: /usr/local/sbin/happyhacks-deploy" > "$SUDOERS_TMP"
+if visudo -cf "$SUDOERS_TMP" >/dev/null 2>&1; then install -m 440 -o root -g root "$SUDOERS_TMP" /etc/sudoers.d/happyhacks-deploy
+else echo "Note: couldn't add the sudo rule for /admin updates (visudo check failed); deploy over SSH as before."; fi
+rm -f "$SUDOERS_TMP"
 
 # CloudPanel's vhost serves css/js/images/fonts by file type straight from htdocs, not from the app
 HTDOCS="${HTDOCS:-$HOME_DIR/htdocs/$DOMAIN}"
@@ -113,3 +127,8 @@ else echo "App did not answer on port $APP_PORT. Look at: tail -50 $LOGS/gunicor
 echo
 echo "Done. Site: https://$DOMAIN"
 echo "  HTTPS: in CloudPanel, Sites > $DOMAIN > SSL/TLS > New Let's Encrypt Certificate (once DNS points here)."
+echo "  Admin: https://$DOMAIN/admin"
+if [ -n "$NEW_ADMIN_PW" ]; then
+  echo "  Admin password (also in $APP/.env as ADMIN_PASSWORD):"
+  echo "      $NEW_ADMIN_PW"
+fi

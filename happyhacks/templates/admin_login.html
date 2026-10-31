@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Admin sign in · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="page">
+  <div class="wrap admin-narrow">
+    <div class="admin-card">
+      <img class="admin-mark" src="{{ asset('favicon.svg') }}" alt="" width="44" height="44">
+      <h1 class="admin-title">Admin</h1>
+      {% if error %}<p class="msg err">{{ error }}</p>{% endif %}
+      {% if not disabled %}
+      <form method="post" action="{{ url_for('admin.login') }}">
+        <label for="pw">Admin password</label>
+        <input id="pw" name="password" type="password" autocomplete="current-password" required autofocus>
+        <button class="btn" type="submit">Sign in</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

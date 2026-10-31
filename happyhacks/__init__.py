@@ -1,7 +1,10 @@
 """happyhacks.io — parent site for small software products."""
 import os
+from datetime import timedelta
 
 from flask import Flask, abort, render_template, send_from_directory, url_for
+
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .products import PRODUCTS, get_product
 
@@ -15,6 +18,18 @@ def create_app() -> Flask:
         static_url_path="/static",
     )
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-me")
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Strict",
+        # Secure cookies need HTTPS; set SESSION_COOKIE_SECURE=0 in .env for plain-http local dev
+        SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "1") != "0",
+        PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+    )
+    # nginx (CloudPanel) sits in front: trust its X-Forwarded-For/-Proto so client IPs and https are right
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+    from .admin import bp as admin_bp
+    app.register_blueprint(admin_bp)
 
     @app.context_processor
     def inject_globals():

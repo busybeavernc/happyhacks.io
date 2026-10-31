@@ -49,3 +49,11 @@ sudo happyhacks-deploy
 ```
 
 The first run creates a deploy key (`~/.ssh/happyhacks_deploy`) and prints it; add it at GitHub > repo > Settings > Deploy keys (read-only), then run again. It uses its own SSH host alias, so it won't clash with ZipZip's deploy key.
+
+## Admin (/admin)
+
+`https://happyhacks.io/admin` lets you run the deploy from the browser and watch its output, like ZipZip's dashboard.
+
+- **Sign-in:** `ADMIN_PASSWORD` in `.env`. `install.sh` generates one the first time and prints it. To change it, edit `.env` and run `sudo supervisorctl restart happyhacks`. Five wrong tries lock that IP out for 15 minutes.
+- **Update live site** runs `sudo -n /usr/local/sbin/happyhacks-deploy` in its own session, so it survives the app restarting mid-deploy. `install.sh` writes `/etc/sudoers.d/happyhacks-deploy`, which allows the site user to run that one command as root and nothing else.
+- Update logs: `~/logs/happyhacks-updates/` (site user's home).
