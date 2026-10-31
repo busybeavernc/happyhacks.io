@@ -10,7 +10,7 @@ PRODUCTS = [
             "including premade forms prepared for fast, accurate fill-in."
         ),
         "status": "In development",
-        "url": "https://zipzip.busybeavernc.com",
+        "url": "https://zipzip.happyhacks.io",
     },
     {
         "slug": "doppleganger",

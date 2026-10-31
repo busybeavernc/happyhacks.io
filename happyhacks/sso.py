@@ -12,7 +12,7 @@ Apps are registered in .env (the secret itself lives only in the app's .env; Hap
   HH_CLIENTS=zipzip
   HH_CLIENT_ZIPZIP_NAME=ZipZip
   HH_CLIENT_ZIPZIP_SECRET_SHA256=<hex>
-  HH_CLIENT_ZIPZIP_REDIRECT_URIS=https://zipzip.busybeavernc.com/auth/happyhacks/callback
+  HH_CLIENT_ZIPZIP_REDIRECT_URIS=https://zipzip.happyhacks.io/auth/happyhacks/callback
 
     python -m happyhacks.sso add <id> "<Name>" <redirect_uri> [more redirect uris]
         registers an app in .env and prints the settings to put in that app's .env
