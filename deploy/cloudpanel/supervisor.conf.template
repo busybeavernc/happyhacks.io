@@ -1,0 +1,20 @@
+; /etc/supervisor/conf.d/happyhacks.conf  (written by deploy/cloudpanel/install.sh)
+; Start/stop:   sudo supervisorctl start|stop|restart happyhacks
+; Status/logs:  sudo supervisorctl status happyhacks ; tail -f {{LOGS}}/gunicorn.log
+; Reload code without dropping requests:  sudo supervisorctl signal HUP happyhacks
+[program:happyhacks]
+directory={{APP}}
+command={{VENV}}/bin/gunicorn -c deploy/gunicorn.conf.py wsgi:app
+user={{USER}}
+autostart=true
+autorestart=true
+startsecs=5
+stopsignal=TERM
+stopwaitsecs=40
+stopasgroup=true
+killasgroup=true
+redirect_stderr=true
+stdout_logfile={{LOGS}}/gunicorn.log
+stdout_logfile_maxbytes=20MB
+stdout_logfile_backups=5
+environment=PYTHONUNBUFFERED="1",HOME="{{HOME}}"

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ product.name }} · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow"><a href="{{ url_for('index') }}#products">← All products</a></p>
+  <h1>{{ product.name }}</h1>
+  <p class="lede">{{ product.tagline }}</p>
+  <p>{{ product.description }}</p>
+  <p><span class="pill">{{ product.status }}</span></p>
+  {% if product.url %}<p><a class="btn" href="{{ product.url }}">Open {{ product.name }}</a></p>{% endif %}
+</section>
+{% endblock %}

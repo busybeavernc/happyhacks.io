@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Not found · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="hero">
+  <p class="eyebrow">404</p>
+  <h1>Nothing hacked here yet.</h1>
+  <p><a class="btn" href="{{ url_for('index') }}">Back home</a></p>
+</section>
+{% endblock %}

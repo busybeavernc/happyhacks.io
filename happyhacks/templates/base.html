@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ site_name }}{% endblock %}</title>
+  <meta name="description" content="HappyHacks builds small, focused software products.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}">
+</head>
+<body>
+  <header class="wrap nav">
+    <a class="brand" href="{{ url_for('index') }}"><span class="dot"></span>happyhacks</a>
+    <nav>
+      <a href="{{ url_for('index') }}#products">Products</a>
+      <a href="{{ url_for('about') }}">About</a>
+    </nav>
+  </header>
+  <main class="wrap">{% block content %}{% endblock %}</main>
+  <footer class="wrap foot">© {{ 2026 }} HappyHacks · Small software, made happily.</footer>
+</body>
+</html>
