@@ -7,12 +7,17 @@
       <img class="admin-mark" src="{{ asset('favicon.svg') }}" alt="" width="44" height="44">
       <h1 class="admin-title">Admin</h1>
       {% if error %}<p class="msg err">{{ error }}</p>{% endif %}
-      {% if not disabled %}
-      <form method="post" action="{{ url_for('admin.login') }}">
-        <label for="pw">Admin password</label>
-        <input id="pw" name="password" type="password" autocomplete="current-password" required autofocus>
-        <button class="btn" type="submit">Sign in</button>
-      </form>
+      {% if not_admin %}<p class="msg info">You're signed in as {{ not_admin }}, which isn't a Happy Hacks administrator.</p>{% endif %}
+      <a class="btn admin-wide" href="{{ url_for('account.signin', next='/admin') }}">Sign in with Happy Hacks</a>
+      {% if password_on %}
+      <details class="admin-backup" {% if error %}open{% endif %}>
+        <summary>Use the admin password instead</summary>
+        <form method="post" action="{{ url_for('admin.login') }}">
+          <label for="pw">Admin password</label>
+          <input id="pw" name="password" type="password" autocomplete="current-password" required>
+          <button class="btn" type="submit">Sign in</button>
+        </form>
+      </details>
       {% endif %}
     </div>
   </div>

@@ -3,7 +3,7 @@
 {% block content %}
 <section class="page">
   <div class="wrap acct-wide">
-    <p class="eyebrow">Your account</p>
+    <p class="eyebrow">Your account{% if is_admin %} · <a href="{{ url_for('admin.dashboard') }}">Admin</a>{% endif %}</p>
     <h1 class="acct-hello">Hi, {{ user.name.split()[0] }}!</h1>
     {% if welcome %}<p class="msg ok">Your Happy Hacks account is ready. Use it to sign in to every Happy Hacks app.</p>{% endif %}
     {% if confirmed %}<p class="msg ok">Confirmed. You can sign in with it now.</p>{% endif %}

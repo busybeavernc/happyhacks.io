@@ -21,6 +21,7 @@ Keeping strangers from being spammed through the form (same rules as zipzip):
 
     python -m happyhacks.accounts list                       accounts
     python -m happyhacks.accounts import-zipzip users.json   copy zipzip's accounts in (same ids, contacts, confirmations)
+    python -m happyhacks.accounts admin|unadmin <email|phone|id>     Happy Hacks administrators (happyhacks.io/admin)
     python -m happyhacks.accounts suspend|unsuspend <email|phone|id>
 """
 import hashlib
@@ -81,6 +82,11 @@ SQLITE = [
 ]
 
 
+# a Happy Hacks-only role: 'admin' opens happyhacks.io/admin. It is never sent to apps (public() leaves it out) and no
+# app's role ever comes in; each app keeps its own.
+MIGRATIONS = ["ALTER TABLE users ADD COLUMN role VARCHAR(16) NOT NULL DEFAULT 'user'"]
+
+
 class AuthError(Exception):
     def __init__(self, message, status=400, **extra):
         super().__init__(message)
@@ -93,7 +99,7 @@ _db = None
 def db():
     global _db
     if _db is None:
-        _db = SQL(MYSQL, SQLITE, 'accounts.sqlite')
+        _db = SQL(MYSQL, SQLITE, 'accounts.sqlite', MIGRATIONS)
     return _db
 
 
@@ -161,7 +167,8 @@ def _user(row):
     return {'id': row['id'], 'name': row['name'], 'email': row.get('email'), 'phone': row.get('phone'),
             'email_verified': bool(row.get('email_verified_at')), 'phone_verified': bool(row.get('phone_verified_at')),
             'created_at': row.get('created_at'), 'last_login_at': row.get('last_login_at'),
-            'suspended_at': row.get('suspended_at'), 'suspended_reason': row.get('suspended_reason')}
+            'suspended_at': row.get('suspended_at'), 'suspended_reason': row.get('suspended_reason'),
+            'role': row.get('role') or 'user'}
 
 
 def get_user(user_id):
@@ -206,6 +213,29 @@ def create_user(name, channel, target):
              (uid, name, target if channel == 'email' else None, target if channel == 'sms' else None,
               now if channel == 'email' else None, now if channel == 'sms' else None, now, now))
     return get_user(uid)
+
+
+def _admin_contacts():
+    """ADMIN_CONTACTS in .env: emails or mobiles that are Happy Hacks administrators (made so when they sign in)."""
+    out = set()
+    for c in str(settings.get('ADMIN_CONTACTS', '') or '').split(','):
+        try:
+            ch, t = parse_contact(c.strip())
+        except AuthError:
+            continue
+        out.add(email_key(t) if ch == 'email' else t)
+    return out
+
+
+def _is_admin_contact(channel, target):
+    return (email_key(target) if channel == 'email' else target) in _admin_contacts()
+
+
+def set_role(user_id, role):
+    if role not in ('user', 'admin'):
+        raise AuthError('Unknown role.')
+    db().run('UPDATE users SET role=%s WHERE id=%s', (role, user_id))
+    return get_user(user_id)
 
 
 def update_name(user_id, name):
@@ -385,6 +415,8 @@ def _complete(row):
             raise AuthError('That account no longer exists.')
         db().run(f'UPDATE users SET last_login_at=%s, {col}_verified_at=COALESCE({col}_verified_at, %s) WHERE id=%s', (now, now, user['id']))
         user = get_user(user['id'])
+    if row['purpose'] in ('login', 'signup') and user.get('role') != 'admin' and _is_admin_contact(row['channel'], row['target']):
+        user = set_role(user['id'], 'admin')
     return user, row['purpose']
 
 
@@ -509,8 +541,8 @@ def import_users(rows):
 def _main(argv):
     cmd = argv[0] if argv else 'list'
     if cmd == 'list':
-        for r in db().run('SELECT id, name, email, phone, created_at, suspended_at FROM users ORDER BY created_at', fetch='all'):
-            print(f"{r['id']}  {r['name']}  {r['email'] or ''}  {r['phone'] or ''}{'  (suspended)' if r['suspended_at'] else ''}")
+        for r in db().run('SELECT id, name, email, phone, role, created_at, suspended_at FROM users ORDER BY created_at', fetch='all'):
+            print(f"{r['id']}  {r['role']:5}  {r['name']}  {r['email'] or ''}  {r['phone'] or ''}{'  (suspended)' if r['suspended_at'] else ''}")
         return 0
     if cmd == 'check':
         n = db().run('SELECT COUNT(*) AS n FROM users', fetch='one')['n']
@@ -524,6 +556,19 @@ def _main(argv):
         print(f"Added {res['added']}, already here {res['same']}, skipped {len(res['skipped'])}.")
         for uid, why in res['skipped']:
             print(f'  skipped {uid}: {why}')
+        return 0
+    if cmd in ('admin', 'unadmin') and len(argv) > 1:   # Happy Hacks administrators (happyhacks.io/admin only)
+        u = get_user(argv[1])
+        if not u:
+            try:
+                u = owner_of(*parse_contact(argv[1]))
+            except AuthError:
+                u = None
+        if not u:
+            print('No Happy Hacks account with that email, number or id. They need to sign up first.')
+            return 1
+        set_role(u['id'], 'admin' if cmd == 'admin' else 'user')
+        print(f"{u['name']} is {'now a Happy Hacks administrator' if cmd == 'admin' else 'no longer a Happy Hacks administrator'}.")
         return 0
     if cmd in ('suspend', 'unsuspend') and len(argv) > 1:
         u = get_user(argv[1])

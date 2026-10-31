@@ -1,4 +1,8 @@
-"""/admin: sign in with ADMIN_PASSWORD (from .env), then run the deploy and watch its output."""
+"""/admin: run the deploy and watch its output.
+
+Two ways in: a Happy Hacks account with the admin role (python -m happyhacks.accounts admin <email>, or ADMIN_CONTACTS),
+signed in the normal way; or ADMIN_PASSWORD from .env, kept as a backup (for example if email sign-in is down).
+The admin role is Happy Hacks-only: apps never see it."""
 import hmac
 import os
 import secrets
@@ -30,8 +34,23 @@ def _locked(ip):
     return len(recent) >= 5
 
 
+def _password_session():
+    return bool(session.get('admin')) and time.time() - session.get('at', 0) < SESSION_HOURS * 3600
+
+
+def _account_admin():
+    from .account_web import current_user
+    u = current_user()
+    return u if u and u.get('role') == 'admin' else None
+
+
 def _signed_in():
-    return session.get('admin') and time.time() - session.get('at', 0) < SESSION_HOURS * 3600
+    return _password_session() or bool(_account_admin())
+
+
+def _who():
+    u = _account_admin()
+    return u['name'] if u else 'admin password'
 
 
 def login_required(view):
@@ -50,10 +69,15 @@ def login_required(view):
 
 @bp.route('/admin/login', methods=['GET', 'POST'])
 def login():
-    if not _password():
-        return render_template('admin_login.html', error='Admin is turned off: set ADMIN_PASSWORD in .env and restart.', disabled=True), 503
+    from .account_web import current_user
+    if request.method == 'GET' and _signed_in():
+        return redirect(url_for('admin.dashboard'))
+    u = current_user()
+    not_admin = u['name'] if u and u.get('role') != 'admin' else None
     error = None
-    if request.method == 'POST':
+    if request.method == 'POST' and not _password():
+        error = 'The admin password is turned off (ADMIN_PASSWORD is empty in .env). Sign in with an administrator account.'
+    elif request.method == 'POST':
         ip = _client_ip()
         if _locked(ip):
             error = 'Too many tries. Wait 15 minutes and try again.'
@@ -66,19 +90,28 @@ def login():
         else:
             _failures.setdefault(ip, []).append(time.time())
             error = 'That password is not right.'
-    return render_template('admin_login.html', error=error), (429 if error and 'Too many' in error else 200)
+    return render_template('admin_login.html', error=error, not_admin=not_admin, password_on=bool(_password())), \
+        (429 if error and 'Too many' in error else 200)
 
 
 @bp.post('/admin/logout')
 def logout():
+    """Signs out of /admin; an account administrator is signed out of their Happy Hacks account too."""
+    from . import accounts
+    from .account_web import SESSION_COOKIE
+    if request.form.get('csrf') and hmac.compare_digest(request.form.get('csrf', ''), session.get('csrf', '')) and _account_admin():
+        accounts.end_session(request.cookies.get(SESSION_COOKIE))
     session.clear()
-    return redirect(url_for('admin.login'))
+    resp = redirect(url_for('admin.login'))
+    resp.delete_cookie(SESSION_COOKIE, path='/')
+    return resp
 
 
 @bp.get('/admin')
 @login_required
 def dashboard():
-    return render_template('admin.html', csrf=session['csrf'])
+    from .account_web import csrf_token
+    return render_template('admin.html', csrf=csrf_token(), who=_who())
 
 
 @bp.get('/admin/api/updates')
@@ -94,7 +127,7 @@ def updates():
 @login_required
 def update_run():
     try:
-        pid = selfupdate.start('admin')
+        pid = selfupdate.start(_who())
     except selfupdate.UpdateError as e:
         return jsonify(error=str(e)), 409
     return jsonify(ok=True, pid=pid)

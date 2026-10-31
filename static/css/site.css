@@ -163,3 +163,8 @@ h1, h2, h3, .brand { font-family: Fredoka, Nunito, sans-serif; color: var(--plum
 .app-icon-lg { width: 88px; height: 88px; margin: 6px 0 14px; }
 .app-icon-sm { width: 28px; height: 28px; border-radius: 7px; box-shadow: none; }
 .acct-app { display: inline-flex; align-items: center; gap: 10px; }
+.admin-wide { width: 100%; justify-content: center; }
+.admin-backup { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+.admin-backup summary { cursor: pointer; color: var(--lavender-ink); font-weight: 700; font-size: 15px; }
+.admin-backup form { margin-top: 12px; }
+.admin-who { color: var(--muted); font-size: 14px; margin-right: 12px; }

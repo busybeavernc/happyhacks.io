@@ -210,7 +210,8 @@ class SignInWithHappyHacks(Base):
     def test_import_from_zipzip_keeps_ids(self):
         self.sign_up('taken@example.com', 'Taken')
         res = accounts.import_users([
-            {'id': 'u1a2b3c4d5e6f', 'name': 'Zed', 'email': 'zed@example.com', 'email_verified': True, 'phone': '+19195550111', 'phone_verified': True},
+            {'id': 'u1a2b3c4d5e6f', 'name': 'Zed', 'email': 'zed@example.com', 'email_verified': True, 'phone': '+19195550111', 'phone_verified': True,
+             'role': 'admin'},
             {'id': 'u000000000001', 'name': 'Dup', 'email': 'Taken+x@example.com', 'email_verified': True},
             {'id': 'u000000000002', 'name': 'Nobody'},
         ])
@@ -218,7 +219,7 @@ class SignInWithHappyHacks(Base):
         self.assertEqual(len(res['skipped']), 2)
         u = accounts.get_user('u1a2b3c4d5e6f')
         self.assertTrue(u['phone_verified'])
-        self.assertNotIn('role', u)   # a zipzip role doesn't come along (Happy Hacks accounts have none)
+        self.assertEqual(u['role'], 'user')   # a zipzip administrator is not a Happy Hacks one
         self.assertEqual(accounts.import_users([{'id': 'u1a2b3c4d5e6f', 'email': 'zed@example.com'}])['same'], 1)
         # an imported, confirmed mobile can sign in by text right away
         r = self.start('919-555-0111')

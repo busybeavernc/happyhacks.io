@@ -54,7 +54,14 @@ The first run creates a deploy key (`~/.ssh/happyhacks_deploy`) and prints it; a
 
 `https://happyhacks.io/admin` lets you run the deploy from the browser and watch its output, like ZipZip's dashboard.
 
-- **Sign-in:** `ADMIN_PASSWORD` in `.env`. `install.sh` generates one the first time and prints it. To change it, edit `.env` and run `sudo supervisorctl restart happyhacks`. Five wrong tries lock that IP out for 15 minutes.
+- **Sign-in:** with a Happy Hacks account that has the **admin** role (the normal sign-in; admins go straight in, other
+  accounts are turned away). Make an account an administrator, once it exists:
+  `python -m happyhacks.accounts admin you@example.com` (or `unadmin`; `list` shows roles), or put the address in
+  `ADMIN_CONTACTS=` in `.env` and it becomes one at its next sign-in. The role is **Happy Hacks only**: it is never sent
+  to ZipZip or other apps, and their roles never come in.
+- **Backup:** `ADMIN_PASSWORD` in `.env` ("Use the admin password instead"), e.g. if email sign-in is down. `install.sh`
+  generates one the first time and prints it; empty it to turn the password off. Five wrong tries lock that IP out for
+  15 minutes. After changing it: `sudo supervisorctl restart happyhacks`.
 - **Update live site** runs `sudo -n /usr/local/sbin/happyhacks-deploy` in its own session, so it survives the app restarting mid-deploy. `install.sh` writes `/etc/sudoers.d/happyhacks-deploy`, which allows the site user to run that one command as root and nothing else.
 - Update logs: `~/logs/happyhacks-updates/` (site user's home).
 

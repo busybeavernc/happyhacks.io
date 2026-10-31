@@ -5,7 +5,8 @@
   <div class="wrap">
     <div class="admin-head">
       <h1 class="admin-title">Admin</h1>
-      <form method="post" action="{{ url_for('admin.logout') }}"><button class="linkbtn" type="submit">Sign out</button></form>
+      <form method="post" action="{{ url_for('admin.logout') }}"><span class="admin-who">{{ who }}</span>
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="linkbtn" type="submit">Sign out</button></form>
     </div>
 
     <div class="admin-card" id="upd">

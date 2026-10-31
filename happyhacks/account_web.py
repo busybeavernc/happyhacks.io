@@ -286,7 +286,7 @@ def _redirect(e):
 
 def _home(user, status=200, **kw):
     apps = [p for p in PRODUCTS if p.get('url')]
-    return _page('account/home.html', status, user=accounts.public(user), apps=apps, devices=len(accounts.sessions_of(user['id'])),
+    return _page('account/home.html', status, user=accounts.public(user), is_admin=user.get('role') == 'admin', apps=apps, devices=len(accounts.sessions_of(user['id'])),
                  adding=session.get('a_add'), welcome=request.args.get('welcome'), confirmed=request.args.get('confirmed'), **kw)
 
 
