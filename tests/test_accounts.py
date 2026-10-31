@@ -170,6 +170,8 @@ class SignInWithHappyHacks(Base):
         self.assertEqual(r.status_code, 200, r.json)
         self.assertEqual(r.json['user']['email'], 'ann@example.com')
         self.assertTrue(r.json['user']['email_verified'])
+        # identity only: no roles or permissions ever go to an app (each app decides those itself)
+        self.assertEqual(set(r.json['user']), {'id', 'name', 'email', 'phone', 'email_verified', 'phone_verified', 'phone_display'})
         # one use only
         r = self.token(client_id='zipzip', client_secret=APP_SECRET, code=code, redirect_uri=CALLBACK, code_verifier=verifier)
         self.assertEqual(r.json['error'], 'invalid_grant')
@@ -214,6 +216,7 @@ class SignInWithHappyHacks(Base):
         self.assertEqual(len(res['skipped']), 2)
         u = accounts.get_user('u1a2b3c4d5e6f')
         self.assertTrue(u['phone_verified'])
+        self.assertNotIn('role', u)   # a zipzip role doesn't come along (Happy Hacks accounts have none)
         self.assertEqual(accounts.import_users([{'id': 'u1a2b3c4d5e6f', 'email': 'zed@example.com'}])['same'], 1)
         # an imported, confirmed mobile can sign in by text right away
         r = self.start('919-555-0111')
