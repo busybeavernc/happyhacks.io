@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Your account · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="page">
+  <div class="wrap acct-wide">
+    <p class="eyebrow">Your account</p>
+    <h1 class="acct-hello">Hi, {{ user.name.split()[0] }}!</h1>
+    {% if welcome %}<p class="msg ok">Your Happy Hacks account is ready. Use it to sign in to every Happy Hacks app.</p>{% endif %}
+    {% if confirmed %}<p class="msg ok">Confirmed. You can sign in with it now.</p>{% endif %}
+    {% if request.args.get('saved') %}<p class="msg ok">Saved.</p>{% endif %}
+    {% if request.args.get('others') %}<p class="msg ok">Signed out on every other device.</p>{% endif %}
+    {% if error %}<p class="msg err" role="alert">{{ error }}</p>{% endif %}
+
+    <div class="acct-grid">
+      <div class="acct-card">
+        <h2>Your name</h2>
+        <form method="post" action="{{ url_for('account.name') }}" class="acct-inline">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+          <input name="name" type="text" autocomplete="name" value="{{ user.name }}" aria-label="Your name" required>
+          <button class="btn btn-sm" type="submit">Save</button>
+        </form>
+      </div>
+
+      <div class="acct-card" id="signin-ways">
+        <h2>Ways to sign in</h2>
+        <dl class="kv">
+          <dt>Email</dt>
+          <dd>{% if user.email %}{{ user.email }} {% if user.email_verified %}<span class="tag ok">confirmed</span>{% endif %}
+            {% if user.phone %}<form method="post" action="{{ url_for('account.contact_remove') }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="channel" value="email"><button class="linkbtn" type="submit">Remove</button></form>{% endif %}
+            {% else %}<span class="muted">None yet</span>{% endif %}</dd>
+          <dt>Mobile</dt>
+          <dd>{% if user.phone %}{{ user.phone_display }} {% if user.phone_verified %}<span class="tag ok">confirmed</span>{% endif %}
+            {% if user.email %}<form method="post" action="{{ url_for('account.contact_remove') }}" class="inline"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><input type="hidden" name="channel" value="sms"><button class="linkbtn" type="submit">Remove</button></form>{% endif %}
+            {% else %}<span class="muted">None yet</span>{% endif %}</dd>
+        </dl>
+        {% if adding %}
+          <p class="acct-sub">We sent a code to <b>{{ adding.masked }}</b>.</p>
+          <form method="post" action="{{ url_for('account.contact_verify') }}" class="acct-inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+            <input name="code" class="codeinp" inputmode="numeric" autocomplete="one-time-code" maxlength="7" aria-label="6-digit code" placeholder="6-digit code" required autofocus>
+            <button class="btn btn-sm" type="submit">Confirm</button>
+          </form>
+          <form method="post" action="{{ url_for('account.contact_cancel') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="linkbtn" type="submit">Cancel</button></form>
+        {% else %}
+          <form method="post" action="{{ url_for('account.contact_add') }}" class="acct-inline">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+            <input name="contact" type="text" placeholder="{{ 'Add a mobile number' if not user.phone else 'New email or mobile' }}" aria-label="Email or mobile number to add" required>
+            <button class="btn btn-sm" type="submit">Send code</button>
+          </form>
+          <p class="acct-note">Add {{ 'a mobile number to sign in by text, or ' if not user.phone else '' }}a new email or number. We'll send a code to confirm it.</p>
+        {% endif %}
+      </div>
+
+      {% if apps %}
+      <div class="acct-card">
+        <h2>Your apps</h2>
+        <p class="acct-note" style="margin-top:0">Sign in to these with your Happy Hacks account.</p>
+        <ul class="acct-apps">
+          {% for p in apps %}<li><span>{{ p.name }}</span><a class="linkbtn" href="{{ p.url }}">Open →</a></li>{% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <div class="acct-card">
+        <h2>Devices</h2>
+        <p class="acct-sub">Signed in on {{ devices }} device{{ '' if devices == 1 else 's' }}.</p>
+        <div class="acct-row">
+          {% if devices > 1 %}
+          <form method="post" action="{{ url_for('account.devices_signout') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="linkbtn" type="submit">Sign out of other devices</button></form>
+          {% endif %}
+          <form method="post" action="{{ url_for('account.signout') }}"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="btn btn-sm" type="submit">Sign out</button></form>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

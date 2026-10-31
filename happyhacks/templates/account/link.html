@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Your code · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="page">
+  <div class="wrap acct-narrow">
+    <div class="acct-card acct-center">
+      <img class="acct-mark" src="{{ asset('favicon.svg') }}" alt="" width="44" height="44">
+      <h1 class="acct-title">Your code</h1>
+      <p class="acct-sub">To {{ what }}, enter this code on the device where you asked for it:</p>
+      <p class="bigcode">{{ code[:3] }}&#8201;{{ code[3:] }}</p>
+      <p class="acct-note">It expires 10 minutes after it was sent.</p>
+      {% if not adding %}
+      <form method="post" action="{{ url_for('account.link_post') }}">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="t" value="{{ token }}">
+        <button class="btn btn-ghost" type="submit">Sign in on this device instead</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}

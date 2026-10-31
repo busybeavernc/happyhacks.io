@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="page">
+  <div class="wrap acct-narrow">
+    <div class="acct-card acct-center">
+      <img class="acct-mark" src="{{ asset('favicon.svg') }}" alt="" width="44" height="44">
+      <h1 class="acct-title">{{ title }}</h1>
+      <p class="acct-sub">{{ text }}</p>
+      <p><a class="btn" href="{{ url_for('account.signin') }}">Go to sign in</a></p>
+    </div>
+  </div>
+</section>
+{% endblock %}

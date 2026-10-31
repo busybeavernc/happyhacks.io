@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Create your account' if need_name else 'Sign in' }} · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="page">
+  <div class="wrap acct-narrow">
+    <div class="acct-card">
+      <img class="acct-mark" src="{{ asset('favicon.svg') }}" alt="" width="44" height="44">
+      {% if need_name %}
+        <h1 class="acct-title">Create your free account</h1>
+      {% elif mode == 'signup' %}
+        <h1 class="acct-title">Create your free account</h1>
+      {% else %}
+        <h1 class="acct-title">Welcome back</h1>
+      {% endif %}
+      {% if app_name %}<p class="acct-sub">Sign in with your Happy Hacks account to continue to <b>{{ app_name }}</b>.</p>
+      {% else %}<p class="acct-sub">One account for every Happy Hacks app.</p>{% endif %}
+
+      {% if error %}<p class="msg {{ 'err' if not need_name or name else 'info' }}" role="alert">{{ error }}</p>{% endif %}
+
+      <form method="post" action="{{ url_for('account.signin_post') }}" class="acct-form" novalidate>
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="ts" value="{{ stamp }}">
+        <input type="hidden" name="mode" value="{{ mode }}">
+        <div class="hp" aria-hidden="true"><label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+        <label for="contact">{{ 'Your email address' if mode == 'signup' else 'Email or mobile number' }}</label>
+        <input id="contact" name="contact" type="text" inputmode="email" autocomplete="username" required value="{{ contact }}"
+               placeholder="{{ 'you@example.com' if mode == 'signup' else 'you@example.com or mobile' }}" {% if not need_name %}autofocus{% endif %}>
+        {% if need_name %}
+        <label for="name">Your name</label>
+        <input id="name" name="name" type="text" autocomplete="name" required value="{{ name }}" autofocus>
+        {% endif %}
+        <button class="btn" type="submit">{{ 'Create my free account' if need_name else 'Send my code' }}</button>
+      </form>
+      <p class="acct-note">No password: we email or text you a 6-digit code.
+        {% if mode == 'signup' %}<a href="{{ url_for('account.signin', keep=1) }}">Have an account? Sign in</a>
+        {% else %}<a href="{{ url_for('account.signin', new=1, keep=1) }}">New here? Create a free account</a>{% endif %}</p>
+    </div>
+  </div>
+</section>
+{% endblock %}

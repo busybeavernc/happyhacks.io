@@ -26,7 +26,12 @@
       <nav>
         <a href="{{ url_for('index') }}#apps">Apps</a>
         <a href="{{ url_for('about') }}">Our story</a>
-        <a class="btn btn-sm" href="{{ url_for('index') }}#apps">Explore apps</a>
+        {% if hh_user %}
+        <a class="btn btn-sm" href="{{ url_for('account.home') }}">{{ hh_user.name.split()[0] }}</a>
+        {% else %}
+        <a class="nav-signin" href="{{ url_for('account.signin') }}">Sign in</a>
+        <a class="btn btn-sm" href="{{ url_for('account.signin', new=1) }}">Create account</a>
+        {% endif %}
       </nav>
     </div>
   </header>

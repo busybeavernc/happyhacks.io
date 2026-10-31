@@ -1,3 +1,5 @@
 Flask>=3.0,<4
 gunicorn>=22,<24
 python-dotenv>=1.0
+# MySQL / MariaDB for accounts (the rsa extra handles MySQL 8's default login method)
+PyMySQL[rsa]>=1.1,<2

@@ -20,7 +20,7 @@ def create_app() -> Flask:
     app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-only-change-me")
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
-        SESSION_COOKIE_SAMESITE="Strict",
+        SESSION_COOKIE_SAMESITE="Lax",   # Lax: arriving from an app (Sign in with Happy Hacks) keeps the cookie
         # Secure cookies need HTTPS; set SESSION_COOKIE_SECURE=0 in .env for plain-http local dev
         SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE", "1") != "0",
         PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
@@ -29,7 +29,9 @@ def create_app() -> Flask:
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     from .admin import bp as admin_bp
+    from .account_web import bp as account_bp
     app.register_blueprint(admin_bp)
+    app.register_blueprint(account_bp)
 
     @app.context_processor
     def inject_globals():

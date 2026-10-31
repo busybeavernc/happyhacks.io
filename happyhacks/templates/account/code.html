@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Enter your code · {{ site_name }}{% endblock %}
+{% block content %}
+<section class="page">
+  <div class="wrap acct-narrow">
+    <div class="acct-card">
+      <img class="acct-mark" src="{{ asset('favicon.svg') }}" alt="" width="44" height="44">
+      <h1 class="acct-title">Check your {{ 'texts' if channel == 'sms' else 'email' }}</h1>
+      <p class="acct-sub">We sent {{ 'a code to confirm your account' if purpose == 'signup' else 'a sign-in code' }} to <b>{{ masked }}</b>.
+        Enter it below, or tap the link in the {{ 'text' if channel == 'sms' else 'email' }}.</p>
+      {% if error %}<p class="msg err" role="alert">{{ error }}</p>{% endif %}
+      <form method="post" action="{{ url_for('account.code_post') }}" class="acct-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <label for="code">6-digit code</label>
+        <input id="code" name="code" class="codeinp" inputmode="numeric" autocomplete="one-time-code" maxlength="7" pattern="[0-9 ]*" required autofocus>
+        <button class="btn" type="submit">{{ 'Continue to ' ~ app_name if app_name else 'Sign in' }}</button>
+      </form>
+      <div class="acct-row">
+        <form method="post" action="{{ url_for('account.signin_post') }}">
+          <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="ts" value="{{ stamp }}">
+          <input type="hidden" name="contact" value="{{ contact }}">
+          <input type="hidden" name="resend" value="1">
+          <button class="linkbtn" type="submit">Send a new code</button>
+        </form>
+        <a class="linkbtn" href="{{ url_for('account.signin', keep=1) }}">Use a different email or number</a>
+      </div>
+      <p class="acct-note">Not there? Check your spam folder. Codes expire in 10 minutes.</p>
+    </div>
+  </div>
+</section>
+{% endblock %}

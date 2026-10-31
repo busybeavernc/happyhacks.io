@@ -77,8 +77,16 @@ if ! grep -qE '^ADMIN_PASSWORD=.+' "$APP/.env"; then   # sign-in for /admin
   NEW_ADMIN_PW="$("$PYTHON" -c 'import secrets; print(secrets.token_urlsafe(18))')"
   echo "ADMIN_PASSWORD=$NEW_ADMIN_PW" >> "$APP/.env"
 fi
+grep -qE '^DATA_DIR=.+' "$APP/.env" || { sed -i '/^DATA_DIR=/d' "$APP/.env"; echo "DATA_DIR=$HOME_DIR/happyhacks-data" >> "$APP/.env"; }
+install -d -o "$SITE_USER" -g "$GROUP" -m 750 "$HOME_DIR/happyhacks-data"
 chown "$SITE_USER:$GROUP" "$APP/.env"; chmod 600 "$APP/.env"
 APP_PORT="$(grep -E '^APP_PORT=' "$APP/.env" | tail -1 | cut -d= -f2-)"
+
+say "Accounts database"
+if ! ( cd "$APP" && as_user "$VENV/bin/python" -m happyhacks.accounts check ); then
+  echo "Fix the DB_ settings in $APP/.env (the database and user are on CloudPanel's Databases page), then run this script again."
+  exit 1
+fi
 
 say "Self-test"
 ( cd "$APP" && as_user env PYTHONDONTWRITEBYTECODE=1 "$VENV/bin/python" -m unittest discover -s tests -t . 2>&1 | tail -3 )
