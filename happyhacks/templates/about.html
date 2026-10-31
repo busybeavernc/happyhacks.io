@@ -1,9 +1,13 @@
 {% extends "base.html" %}
-{% block title %}About · {{ site_name }}{% endblock %}
+{% block title %}Our story · {{ site_name }}{% endblock %}
 {% block content %}
-<section class="hero">
-  <p class="eyebrow">About</p>
-  <h1>Why HappyHacks?</h1>
-  <p class="lede">Every product here starts as a hack for a real problem, then gets polished until it's a tool people are happy to use.</p>
+<section class="page">
+  <div class="wrap narrow">
+    <p class="eyebrow">Our story</p>
+    <h1>A little help goes a long way.</h1>
+    <p class="tagline">A little help. A happier day.</p>
+    <p class="lede">Every Happy Hacks app starts as a hack for a real, everyday problem. Then we polish it until it's a tool people are genuinely happy to use: focused, friendly, and out of your way.</p>
+    <p><a class="btn" href="{{ url_for('index') }}#apps">Explore apps <span aria-hidden="true">→</span></a></p>
+  </div>
 </section>
 {% endblock %}

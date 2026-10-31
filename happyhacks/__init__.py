@@ -1,7 +1,7 @@
 """happyhacks.io — parent site for small software products."""
 import os
 
-from flask import Flask, abort, render_template
+from flask import Flask, abort, render_template, send_from_directory, url_for
 
 from .products import PRODUCTS, get_product
 
@@ -18,7 +18,21 @@ def create_app() -> Flask:
 
     @app.context_processor
     def inject_globals():
-        return {"products": PRODUCTS, "site_name": "HappyHacks"}
+        return {"products": PRODUCTS, "site_name": "Happy Hacks", "asset": asset}
+
+    def asset(filename: str) -> str:
+        """Static URL with a ?v=<mtime> suffix. CloudPanel's vhost caches css/js/images
+        forever (expires max), so a changed file needs a new URL to reach browsers."""
+        try:
+            v = int(os.path.getmtime(os.path.join(app.static_folder, filename)))
+        except OSError:
+            v = 0
+        return url_for("static", filename=filename, v=v)
+
+    @app.route("/favicon.ico")
+    def favicon():
+        # In production nginx serves this from htdocs (install.sh copies it there).
+        return send_from_directory(app.static_folder, "favicon.ico")
 
     @app.route("/")
     def index():

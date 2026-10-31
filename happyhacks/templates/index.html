@@ -1,22 +1,36 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="hero">
-  <p class="eyebrow">A small-software studio</p>
-  <h1>Small tools that do one job <em>really</em> well.</h1>
-  <p class="lede">HappyHacks is the home for focused products built to solve real, specific problems — without the bloat.</p>
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <h1>Make room for what matters.</h1>
+      <p class="tagline">A little help. A happier day.</p>
+      <p class="lede">Happy Hacks builds small, friendly software that takes the busywork off your plate, so you can get back to the work you care about.</p>
+      <a class="btn" href="#apps">Explore apps <span aria-hidden="true">→</span></a>
+    </div>
+    <div class="hero-art" aria-hidden="true">
+      <span class="blob blob-lav"></span>
+      <span class="blob blob-sage"></span>
+      <span class="blob blob-peach"></span>
+      <img src="{{ asset('img/hero-mark.png') }}" alt="" width="768" height="548">
+    </div>
+  </div>
 </section>
 
-<section id="products">
-  <h2 class="section-title">Products</h2>
-  <div class="grid">
-    {% for p in products %}
-    <a class="card" href="{{ url_for('product', slug=p.slug) }}">
-      <span class="pill">{{ p.status }}</span>
-      <h3>{{ p.name }}</h3>
-      <p>{{ p.tagline }}</p>
-      <span class="more">Learn more →</span>
-    </a>
-    {% endfor %}
+<section id="apps" class="apps">
+  <div class="wrap">
+    <p class="eyebrow">Our apps</p>
+    <h2>Little tools, big relief.</h2>
+    <div class="grid">
+      {% for p in products %}
+      <a class="card card-{{ loop.index0 % 3 }}" href="{{ url_for('product', slug=p.slug) }}">
+        <span class="pill">{{ p.status }}</span>
+        <h3>{{ p.name }}</h3>
+        <p>{{ p.tagline }}</p>
+        <span class="more">Learn more <span aria-hidden="true">→</span></span>
+      </a>
+      {% endfor %}
+    </div>
   </div>
 </section>
 {% endblock %}

@@ -94,6 +94,7 @@ HTDOCS="${HTDOCS:-$HOME_DIR/htdocs/$DOMAIN}"
 if [ -d "$HTDOCS" ]; then
   install -d -o "$SITE_USER" -g "$GROUP" "$HTDOCS/static"
   rsync -a --delete "$APP/static/" "$HTDOCS/static/"
+  install -o "$SITE_USER" -g "$GROUP" -m 644 "$APP/static/favicon.ico" "$HTDOCS/favicon.ico"   # browsers ask for /favicon.ico
   chown -R "$SITE_USER:$GROUP" "$HTDOCS/static"
   echo "Copied static files to $HTDOCS/static"
 else
