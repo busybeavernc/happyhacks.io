@@ -360,8 +360,8 @@ def authorize():
     except sso.SSOError as e:
         return _page('account/message.html', 400, title='Can\'t sign in to this app', text=str(e))
     u = current_user()
-    if not u:
-        return redirect(url_for('account.signin', next=request.full_path), 303)
+    if not u:   # screen_hint=signup: the app's "Try it free" button, so open on "Create your free account"
+        return redirect(url_for('account.signin', next=request.full_path, new=1 if request.args.get('screen_hint') == 'signup' else None), 303)
     code_ = sso.issue_code(c['id'], u['id'], p['redirect_uri'], p['challenge'])
     sep = '&' if '?' in p['redirect_uri'] else '?'
     return redirect(p['redirect_uri'] + sep + urlencode({'code': code_, 'state': p['state']}), 303)
