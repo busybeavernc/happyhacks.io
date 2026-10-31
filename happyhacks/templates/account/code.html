@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "account/branded.html" if theme else "base.html" %}
 {% block title %}Enter your code · {{ site_name }}{% endblock %}
 {% block content %}
 <section class="page">

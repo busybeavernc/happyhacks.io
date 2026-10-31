@@ -1,0 +1,16 @@
+{
+  "name": "ZipZip",
+  "tagline": "Less typing. More selling.",
+  "mark": "zipzip-mark.svg",
+  "fonts_url": "https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Public+Sans:wght@400;600;700&display=swap",
+  "font_heading": "Outfit",
+  "font_body": "Public Sans",
+  "light": {
+    "page": "#F7F9FC", "card": "#FFFFFF", "ink": "#14263D", "muted": "#5D6878", "line": "#DFE3EA",
+    "button": "#14263D", "button_ink": "#FFFFFF", "accent": "#00B89C", "link": "#007A66", "field": "#F7F9FC"
+  },
+  "dark": {
+    "page": "#10141B", "card": "#171C25", "ink": "#E6EAF1", "muted": "#9AA5B5", "line": "#283040",
+    "button": "#DCE5F1", "button_ink": "#0C1A2C", "accent": "#2ED3B5", "link": "#9FE8D8", "field": "#10141B"
+  }
+}

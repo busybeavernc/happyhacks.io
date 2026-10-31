@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ site_name }}{% endblock %}</title>
+  <meta name="robots" content="noindex">
+  <meta name="color-scheme" content="{{ 'light dark' if theme.dark else 'light' }}">
+  <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+  {% if theme.fonts_url %}<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="{{ theme.fonts_url }}">{% endif %}
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ asset('css/site.css') }}">
+  <style>
+    :root { {% for k, v in theme.light.items() %}--t-{{ k }}: {{ v }}; {% endfor %}
+      {#- font names are limited to letters, numbers and spaces (happyhacks/themes.py), so quoting them here is safe -#}
+      --t-head: {{ (('"' ~ theme.font_heading ~ '", ') if theme.font_heading else '')|safe }}system-ui, sans-serif;
+      --t-body: {{ (('"' ~ theme.font_body ~ '", ') if theme.font_body else '')|safe }}system-ui, sans-serif; }
+    {% if theme.dark %}@media (prefers-color-scheme: dark) { :root { {% for k, v in theme.dark.items() %}--t-{{ k }}: {{ v }}; {% endfor %} } }{% endif %}
+    body.branded { background: var(--t-page); color: var(--t-ink); font-family: var(--t-body); }
+    .branded main { display: flex; flex-direction: column; align-items: center; padding: 40px 16px 32px; }
+    .branded .page { padding: 0; width: 100%; }
+    .branded .acct-narrow { max-width: 440px; padding: 0; }
+    .branded h1, .branded h2, .branded .acct-title { font-family: var(--t-head); color: var(--t-ink); letter-spacing: -.01em; }
+    .branded .acct-title { font-size: 28px; font-weight: 700; }
+    .branded .acct-mark { display: none; }
+    .branded .acct-card { background: var(--t-card); border: 1px solid var(--t-line); border-radius: 14px; box-shadow: 0 10px 30px -22px rgba(0,0,0,.45); }
+    .branded .acct-sub, .branded .acct-note { color: var(--t-muted); }
+    .branded .acct-form label { color: var(--t-ink); }
+    .branded .acct-card input[type=text], .branded .acct-card input:not([type]), .branded .acct-card .codeinp {
+      background: var(--t-field); border-color: var(--t-line); color: var(--t-ink); border-radius: 10px; }
+    .branded .acct-card input:focus { outline: 2px solid var(--t-accent); border-color: var(--t-accent); }
+    .branded .btn { background: var(--t-button); color: var(--t-button_ink); border-radius: 10px; box-shadow: none; }
+    .branded .btn:hover { transform: none; filter: brightness(1.12); box-shadow: none; }
+    .branded .btn-ghost { background: transparent; color: var(--t-ink); box-shadow: inset 0 0 0 2px var(--t-ink); }
+    .branded .linkbtn, .branded .acct-note a { color: var(--t-link); }
+    .branded .bigcode { color: var(--t-ink); }
+    .branded .msg.info { background: color-mix(in srgb, var(--t-accent) 14%, var(--t-card)); color: var(--t-ink); }
+    .b-lockup { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--t-ink); margin-bottom: 22px; }
+    .b-lockup svg { width: 46px; height: auto; display: block; }
+    .b-name { font: 700 30px/1 var(--t-head); letter-spacing: -.015em; }
+    .b-tag { font: 400 14px/1.3 var(--t-head); color: var(--t-muted); margin-top: 4px; }
+    .b-product { display: inline-flex; align-items: center; gap: 7px; margin-top: 22px; font-size: 13px; color: var(--t-muted); text-decoration: none; }
+    .b-product img { width: 18px; height: 18px; }
+    .b-product b { font: 700 14px Fredoka, Nunito, sans-serif; color: var(--t-ink); }
+    .b-product:hover b { text-decoration: underline; text-underline-offset: 3px; }
+  </style>
+</head>
+<body class="branded">
+  <main>
+    <a class="b-lockup" href="{{ theme.app_url }}" aria-label="{{ theme.name }}">
+      {% if theme.mark_svg %}{{ theme.mark_svg|safe }}{% endif %}
+      <div><div class="b-name">{{ theme.name }}</div>{% if theme.tagline %}<div class="b-tag">{{ theme.tagline }}</div>{% endif %}</div>
+    </a>
+    {% block content %}{% endblock %}
+    <a class="b-product" href="{{ url_for('index') }}" target="_blank" rel="noopener">
+      A product of <img src="{{ asset('favicon.svg') }}" alt="" width="18" height="18"><b>Happy Hacks</b>
+    </a>
+  </main>
+</body>
+</html>

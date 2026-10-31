@@ -57,3 +57,14 @@ The first run creates a deploy key (`~/.ssh/happyhacks_deploy`) and prints it; a
 - **Sign-in:** `ADMIN_PASSWORD` in `.env`. `install.sh` generates one the first time and prints it. To change it, edit `.env` and run `sudo supervisorctl restart happyhacks`. Five wrong tries lock that IP out for 15 minutes.
 - **Update live site** runs `sudo -n /usr/local/sbin/happyhacks-deploy` in its own session, so it survives the app restarting mid-deploy. `install.sh` writes `/etc/sudoers.d/happyhacks-deploy`, which allows the site user to run that one command as root and nothing else.
 - Update logs: `~/logs/happyhacks-updates/` (site user's home).
+
+## App branding on the sign-in pages
+
+When an app sends someone to sign in ("Sign in with Happy Hacks"), the sign-in, code and link pages wear **that app's**
+look: its logo, name, tagline, colours, fonts and dark mode, with "A product of Happy Hacks" and the Smiling H under the
+panel. Signing in from happyhacks.io itself keeps the Happy Hacks look.
+
+Each registered app gets a file in `happyhacks/themes/`: `<client id>.json` (name, tagline, mark, Google Fonts URL, font
+names, `light` and optional `dark` colours) and its mark as an SVG (colours as `var(--t-ink)`, `var(--t-accent)`,
+`var(--t-card)` so it follows light/dark). See `zipzip.json`. A theme is used only for an app registered in `.env`
+(`HH_CLIENTS`), never from anything in a link, so another site can't make the sign-in page look like someone else's.

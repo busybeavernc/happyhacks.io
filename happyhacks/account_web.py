@@ -21,7 +21,7 @@ from urllib.parse import urlencode, urlsplit, parse_qs
 from flask import (Blueprint, current_app, g, jsonify, make_response, redirect, render_template, request, session, url_for)
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from . import accounts, sso
+from . import accounts, sso, themes
 from .products import PRODUCTS
 
 bp = Blueprint('account', __name__, url_prefix='/account')
@@ -87,13 +87,23 @@ def _safe_next(n):
     return None
 
 
-def _client_for_next(n):
-    """When signing in on the way to an app, its name (for "Sign in to continue to ZipZip")."""
-    if n and n.startswith('/account/authorize'):
+def _flow_client_id():
+    """The registered app this sign-in is on its way to: from the authorize request it started with, or (on the link
+    in a message, maybe opened in another browser) the ?app= the link carries. Only registered apps count."""
+    n = session.get('a_next') or ''
+    if n.startswith('/account/authorize'):
         cid = (parse_qs(urlsplit(n).query).get('client_id') or [''])[0]
-        c = sso.client(cid)
-        return c['name'] if c else None
-    return None
+    elif request.endpoint == 'account.link':   # only the link from a message carries ?app=
+        cid = request.args.get('app') or ''
+    else:
+        cid = ''
+    return cid if sso.client(cid) else None
+
+
+def _client_for_next(n=None):
+    """When signing in on the way to an app, its name (for "Sign in to continue to ZipZip")."""
+    c = sso.client(_flow_client_id())
+    return c['name'] if c else None
 
 
 def _base_url():
@@ -115,7 +125,11 @@ def _after_sign_in(new=False):
     return redirect(n or url_for('account.home', welcome=1 if new else None), 303)
 
 
-def _page(template, status=200, **kw):
+def _page(template, status=200, cid=None, **kw):
+    """A page of the sign-in flow. On the way to a registered app it wears that app's theme (happyhacks/themes)."""
+    theme = themes.for_client(cid or _flow_client_id())
+    if theme and template != 'account/home.html':
+        kw.update(theme=theme, site_name=theme['name'])
     resp = make_response(render_template(template, **kw), status)
     resp.headers['Cache-Control'] = 'no-store'
     resp.headers['Referrer-Policy'] = 'no-referrer'
@@ -169,7 +183,7 @@ def signin_post():
                 return again(msg, need_name=True, status=200 if not name else 400)
             return again(str(e), status=e.status)
         try:
-            accounts.send(info, _base_url(), app_name)
+            accounts.send(info, _base_url(), app_name, _flow_client_id())
         except Exception as e:   # noqa: BLE001
             return again(str(e) if e.__class__.__name__ == 'SendError' else 'The code could not be sent. Try again.', status=502)
     session.update(a_contact=contact, a_name=name, a_masked=info['masked'], a_channel=info['channel'], a_purpose=info['purpose'])
@@ -358,7 +372,7 @@ def authorize():
     try:
         c, p = sso.check_authorize(request.args)
     except sso.SSOError as e:
-        return _page('account/message.html', 400, title='Can\'t sign in to this app', text=str(e))
+        return _page('account/message.html', 400, cid=request.args.get('client_id'), title='Can\'t sign in to this app', text=str(e))
     u = current_user()
     if not u:   # screen_hint=signup: the app's "Try it free" button, so open on "Create your free account"
         return redirect(url_for('account.signin', next=request.full_path, new=1 if request.args.get('screen_hint') == 'signup' else None), 303)

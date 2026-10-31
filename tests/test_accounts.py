@@ -11,7 +11,9 @@ import unittest
 from unittest import mock
 from urllib.parse import parse_qs, urlsplit
 
-from happyhacks import accounts, create_app, sso
+from happyhacks import accounts, create_app, notify, sso
+
+REAL_SEND = accounts.send
 
 APP_SECRET = 'zz-client-secret'
 CALLBACK = 'https://zipzip.example.com/auth/happyhacks/callback'
@@ -28,7 +30,7 @@ class Base(unittest.TestCase):
         self.env.start()
         accounts.reset(); sso.reset()
         self.sent = []
-        self.p = mock.patch.object(accounts, 'send', lambda info, base, app_name=None: None if info.get('decoy') else self.sent.append((info, app_name)))
+        self.p = mock.patch.object(accounts, 'send', lambda info, base, app_name=None, app_id=None: None if info.get('decoy') else self.sent.append((info, app_name)))
         self.p.start()
         app = create_app()
         app.config['SESSION_COOKIE_SECURE'] = False
@@ -221,6 +223,46 @@ class SignInWithHappyHacks(Base):
         # an imported, confirmed mobile can sign in by text right away
         r = self.start('919-555-0111')
         self.assertEqual(self.sent[-1][0]['purpose'], 'login')
+
+
+
+class AppBranding(Base):
+    def go_to_signin_for_zipzip(self):
+        v = secrets.token_urlsafe(48)
+        ch = base64.urlsafe_b64encode(hashlib.sha256(v.encode()).digest()).rstrip(b'=').decode()
+        r = self.c.get('/account/authorize', query_string={'client_id': 'zipzip', 'redirect_uri': CALLBACK, 'state': 's',
+                                                           'code_challenge': ch, 'code_challenge_method': 'S256'})
+        return self.c.get(r.headers['Location'])
+
+    def test_signin_wears_the_app_theme_with_happy_hacks_credit(self):
+        page = self.go_to_signin_for_zipzip().get_data(as_text=True)
+        self.assertIn('class="branded"', page)
+        self.assertIn('<div class="b-name">ZipZip</div>', page)
+        self.assertIn('Less typing. More selling.', page)
+        self.assertIn('--t-button: #14263D', page)
+        self.assertIn('--t-head: "Outfit", system-ui', page)
+        self.assertIn('A product of', page)
+        self.assertIn('<title>Sign in · ZipZip</title>', page)
+        self.assertIn('continue to <b>ZipZip</b>', page)
+        # the code page keeps it
+        self.start('kai@example.com', 'Kai')
+        self.assertIn('class="branded"', self.c.get('/account/code').get_data(as_text=True))
+
+    def test_plain_signin_and_unknown_apps_keep_the_happy_hacks_look(self):
+        self.assertNotIn('class="branded"', self.c.get('/account/signin').get_data(as_text=True))
+        self.assertNotIn('class="branded"', self.c.get('/account/signin?app=zipzip').get_data(as_text=True))  # only the flow decides
+        self.start('mo@example.com', 'Mo')
+        t = self.sent[-1][0]['link_token']
+        other = self.app.test_client()
+        self.assertNotIn('class="branded"', other.get(f'/account/link?t={t}&app=evil').get_data(as_text=True))
+        self.assertIn('class="branded"', other.get(f'/account/link?t={t}&app=zipzip').get_data(as_text=True))
+
+    def test_email_link_carries_the_app(self):
+        got = {}
+        with mock.patch.object(notify, 'sign_in_message', lambda *a: got.setdefault('link', a[3])):
+            REAL_SEND({'channel': 'email', 'target': 'a@example.com', 'code': '123456', 'link_token': 'x' * 32,
+                       'purpose': 'login'}, 'https://happyhacks.io', 'ZipZip', 'zipzip')
+        self.assertTrue(got['link'].endswith('&app=zipzip'))
 
 
 if __name__ == '__main__':

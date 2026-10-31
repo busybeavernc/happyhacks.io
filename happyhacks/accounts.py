@@ -345,11 +345,12 @@ def start(contact, name=None, ip=None, purpose=None, user_id=None):
                      'link_token': link_token, 'name': (existing or {}).get('name') if purpose == 'login' else None}
 
 
-def send(info, base_url, app_name=None):
+def send(info, base_url, app_name=None, app_id=None):
     if info.get('decoy'):
         return
     from . import notify
-    link = f"{base_url.rstrip('/')}/account/link?t={info['link_token']}"
+    # &app=: the link page wears that app's look even when opened in another browser (registered apps only)
+    link = f"{base_url.rstrip('/')}/account/link?t={info['link_token']}" + (f'&app={app_id}' if app_id else '')
     notify.sign_in_message(info['channel'], info['target'], info['code'], link, info['purpose'], info.get('name'), app_name)
 
 
