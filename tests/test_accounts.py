@@ -264,6 +264,43 @@ class AppBranding(Base):
                        'purpose': 'login'}, 'https://happyhacks.io', 'ZipZip', 'zipzip')
         self.assertTrue(got['link'].endswith('&app=zipzip'))
 
+    def email(self, app_id, purpose='login'):
+        got = {}
+        def fake(to, subject, text, html=None, from_name=None):
+            got.update(subject=subject, text=text, html=html, from_name=from_name)
+        with mock.patch.object(notify, 'send_email', fake):
+            REAL_SEND({'channel': 'email', 'target': 'a@example.com', 'code': '123456', 'link_token': 'x' * 32,
+                       'purpose': purpose, 'name': 'Avery Agent'}, 'https://happyhacks.io', 'ZipZip' if app_id else None, app_id)
+        return got
+
+    def test_email_wears_the_app_look_with_happy_hacks_credit(self):
+        m = self.email('zipzip')
+        self.assertEqual(m['subject'], 'ZipZip code: 123456')
+        self.assertEqual(m['from_name'], 'ZipZip via Happy Hacks')
+        self.assertIn('background:#14263D', m['html'])                      # ZipZip navy header and button
+        self.assertIn('https://zipzip.happyhacks.io/app-icon/64', m['html'])   # its PNG icon (mail apps skip SVG)
+        self.assertIn('Less typing. More selling.', m['html'])
+        self.assertIn('A product of', m['html'])
+        self.assertIn('ZipZip is a product of Happy Hacks.', m['text'])
+        self.assertIn('Hi Avery', m['text'])
+
+    def test_plain_email_keeps_the_happy_hacks_look(self):
+        m = self.email(None)
+        self.assertEqual(m['subject'], 'Happy Hacks code: 123456')
+        self.assertIsNone(m['from_name'])
+        self.assertIn('background:#493C55', m['html'])
+        self.assertNotIn('A product of', m['html'])
+        # confirming a new email or number is account housekeeping: always the Happy Hacks look
+        self.assertNotIn('ZipZip', self.email('zipzip', purpose='add_email')['html'])
+
+    def test_text_message_names_the_app(self):
+        got = {}
+        with mock.patch.object(notify, 'send_sms', lambda to, text: got.setdefault('text', text)):
+            REAL_SEND({'channel': 'sms', 'target': '+19195550100', 'code': '123456', 'link_token': 'x' * 32, 'purpose': 'login'},
+                      'https://happyhacks.io', 'ZipZip', 'zipzip')
+        self.assertTrue(got['text'].startswith('ZipZip code: 123456'))
+        self.assertIn('Happy Hacks account', got['text'])
+
 
 if __name__ == '__main__':
     unittest.main()

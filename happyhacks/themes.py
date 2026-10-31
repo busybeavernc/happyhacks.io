@@ -5,7 +5,7 @@ One file per registered app in happyhacks/themes/<client id>.json (and its mark,
 only for apps registered in .env (sso.client), never from anything a link says about colours or logos, so a look-alike
 site can't dress the sign-in page up as someone else.
 
-  {"name", "tagline", "mark": "<file>.svg", "fonts_url": "https://fonts.googleapis.com/...", "font_heading", "font_body",
+  {"name", "tagline", "mark": "<file>.svg", "email_icon": "https://<app>/<png>", "fonts_url": "https://fonts.googleapis.com/...", "font_heading", "font_body",
    "light": {page, card, ink, muted, line, button, button_ink, accent, link, field}, "dark": {...same, optional}}
 """
 import json
@@ -48,6 +48,7 @@ def _load(cid):
         except OSError:
             mark = None
     fonts_url = str(t.get('fonts_url') or '')
+    email_icon = str(t.get('email_icon') or '')   # a PNG for emails (mail apps don't show SVG), on the app's own site
     return {
         'id': cid,
         'name': str(t.get('name') or cid)[:40],
@@ -56,6 +57,7 @@ def _load(cid):
         'fonts_url': fonts_url if fonts_url.startswith('https://fonts.googleapis.com/') and '"' not in fonts_url else None,
         'font_heading': t['font_heading'] if FONT.match(str(t.get('font_heading') or '')) else None,
         'font_body': t['font_body'] if FONT.match(str(t.get('font_body') or '')) else None,
+        'email_icon': email_icon if re.fullmatch(r'https://[A-Za-z0-9.-]+(/[A-Za-z0-9._/-]*)?', email_icon) else None,
         'light': light,
         'dark': _colors(t.get('dark')),
     }

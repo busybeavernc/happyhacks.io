@@ -351,7 +351,12 @@ def send(info, base_url, app_name=None, app_id=None):
     from . import notify
     # &app=: the link page wears that app's look even when opened in another browser (registered apps only)
     link = f"{base_url.rstrip('/')}/account/link?t={info['link_token']}" + (f'&app={app_id}' if app_id else '')
-    notify.sign_in_message(info['channel'], info['target'], info['code'], link, info['purpose'], info.get('name'), app_name)
+    theme = None
+    if app_id and info['purpose'] in ('login', 'signup'):
+        from . import themes
+        theme = themes.for_client(app_id)
+    notify.sign_in_message(info['channel'], info['target'], info['code'], link, info['purpose'], info.get('name'), app_name, theme,
+                           base_url)
 
 
 def _complete(row):

@@ -2,6 +2,7 @@
   "name": "ZipZip",
   "tagline": "Less typing. More selling.",
   "mark": "zipzip-mark.svg",
+  "email_icon": "https://zipzip.happyhacks.io/app-icon/64",
   "fonts_url": "https://fonts.googleapis.com/css2?family=Outfit:wght@600;700;800&family=Public+Sans:wght@400;600;700&display=swap",
   "font_heading": "Outfit",
   "font_body": "Public Sans",
