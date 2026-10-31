@@ -1,4 +1,8 @@
-"""Product catalog. Add a new HappyHacks product by appending to PRODUCTS."""
+"""Product catalog. Add a new Happy Hacks product by appending to PRODUCTS.
+
+  icon   the app's own icon in static/img/apps/ (a square PNG, 192 px), shown on its card and page; None for none yet
+  cta    the button on its page ("Open ZipZip", "Download"); url is where it goes
+"""
 
 PRODUCTS = [
     {
@@ -10,15 +14,22 @@ PRODUCTS = [
             "including premade forms prepared for fast, accurate fill-in."
         ),
         "status": "In development",
+        "icon": "img/apps/zipzip.png",
         "url": "https://zipzip.happyhacks.io",
+        "cta": "Open ZipZip",
     },
     {
         "slug": "doppleganger",
         "name": "Doppleganger",
-        "tagline": "Coming soon.",
-        "description": "Details on Doppleganger are on the way.",
-        "status": "In development",
-        "url": None,
+        "tagline": "A seamless switch.",
+        "description": (
+            "Doppleganger records a short, seamless loop of you, then lets you switch between that loop and your live "
+            "webcam in Zoom, Teams or any browser meeting. For Windows 10/11 and macOS 12+."
+        ),
+        "status": "Windows & Mac",
+        "icon": "img/apps/doppleganger.png",
+        "url": "https://github.com/busybeavernc/doppleganger/releases/latest",
+        "cta": "Download",
     },
 ]
 

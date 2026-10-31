@@ -56,7 +56,7 @@
         <h2>Your apps</h2>
         <p class="acct-note" style="margin-top:0">Sign in to these with your Happy Hacks account.</p>
         <ul class="acct-apps">
-          {% for p in apps %}<li><span>{{ p.name }}</span><a class="linkbtn" href="{{ p.url }}">Open →</a></li>{% endfor %}
+          {% for p in apps %}<li><span class="acct-app">{% if p.icon %}<img class="app-icon app-icon-sm" src="{{ asset(p.icon) }}" alt="" width="28" height="28">{% endif %}{{ p.name }}</span><a class="linkbtn" href="{{ p.url }}">{{ 'Download' if p.cta == 'Download' else 'Open' }} →</a></li>{% endfor %}
         </ul>
       </div>
       {% endif %}

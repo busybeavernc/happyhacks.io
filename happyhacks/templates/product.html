@@ -4,11 +4,12 @@
 <section class="page">
   <div class="wrap narrow">
     <p class="eyebrow"><a href="{{ url_for('index') }}#apps">← All apps</a></p>
+    {% if product.icon %}<img class="app-icon app-icon-lg" src="{{ asset(product.icon) }}" alt="{{ product.name }} logo" width="88" height="88">{% endif %}
     <h1>{{ product.name }}</h1>
     <p class="tagline">{{ product.tagline }}</p>
     <p class="lede">{{ product.description }}</p>
     <p><span class="pill">{{ product.status }}</span></p>
-    {% if product.url %}<p><a class="btn" href="{{ product.url }}">Open {{ product.name }} <span aria-hidden="true">→</span></a></p>{% endif %}
+    {% if product.url %}<p><a class="btn" href="{{ product.url }}">{{ product.cta or 'Open ' ~ product.name }} <span aria-hidden="true">→</span></a></p>{% endif %}
   </div>
 </section>
 {% endblock %}
