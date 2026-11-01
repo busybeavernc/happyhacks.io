@@ -1,0 +1,33 @@
+{
+  "name": "Doppleganger",
+  "tagline": "A seamless switch.",
+  "mark": "doppleganger-mark.svg",
+  "email_icon": "https://doppleganger.happyhacks.io/static/img/icon.png",
+  "fonts_url": "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap",
+  "font_heading": "Inter",
+  "font_body": "Inter",
+  "light": {
+    "page": "#F8FAFC",
+    "card": "#FFFFFF",
+    "ink": "#111827",
+    "muted": "#64748B",
+    "line": "#E2E8F0",
+    "button": "#7C3AED",
+    "button_ink": "#FFFFFF",
+    "accent": "#2DD4BF",
+    "link": "#6D28D9",
+    "field": "#F8FAFC"
+  },
+  "dark": {
+    "page": "#111827",
+    "card": "#1A2233",
+    "ink": "#F8FAFC",
+    "muted": "#94A3B8",
+    "line": "#2B3650",
+    "button": "#7C3AED",
+    "button_ink": "#F8FAFC",
+    "accent": "#2DD4BF",
+    "link": "#5EEAD4",
+    "field": "#111827"
+  }
+}

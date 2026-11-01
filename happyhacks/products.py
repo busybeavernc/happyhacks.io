@@ -28,7 +28,7 @@ PRODUCTS = [
         ),
         "status": "Windows & Mac",
         "icon": "img/apps/doppleganger.png",
-        "url": "https://github.com/busybeavernc/doppleganger/releases/latest",
+        "url": "https://doppleganger.happyhacks.io",
         "cta": "Download",
     },
 ]
