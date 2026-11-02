@@ -10,7 +10,7 @@ class SiteTests(unittest.TestCase):
     def test_home_lists_products(self):
         body = self.client.get("/").get_data(as_text=True)
         self.assertIn("ZipZip", body)
-        self.assertIn("Doppleganger", body)
+        self.assertIn("BRB", body)
 
     def test_product_pages(self):
         self.assertEqual(self.client.get("/products/zipzip").status_code, 200)

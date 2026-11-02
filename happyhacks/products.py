@@ -20,16 +20,17 @@ PRODUCTS = [
     },
     {
         "slug": "doppleganger",
-        "name": "Doppleganger",
-        "tagline": "A seamless switch.",
+        "name": "BRB",
+        "tagline": "Need a moment? Be right back.",
         "description": (
-            "Doppleganger records a short, seamless loop of you, then lets you switch between that loop and your live "
-            "webcam in Zoom, Teams or any browser meeting. For Windows 10/11 and macOS 12+."
+            "BRB (Be Right Back) switches between your live camera and a short recorded loop of you, so you can take "
+            "a quick break from a video meeting without distracting anyone. Works with the major meeting apps. "
+            "For Windows 10/11 and macOS 12+."
         ),
         "status": "Windows & Mac",
         "icon": "img/apps/doppleganger.png",
-        "url": "https://doppleganger.happyhacks.io",
-        "cta": "Download",
+        "url": "https://brb.happyhacks.io",
+        "cta": "Get BRB",
     },
 ]
 

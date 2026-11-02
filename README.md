@@ -1,6 +1,6 @@
 # happyhacks.io
 
-Parent site for HappyHacks products (ZipZip, Doppleganger, …). Flask app served by gunicorn on **127.0.0.1:9010** under supervisor, behind CloudPanel's nginx — same layout as ZipZip.
+Parent site for HappyHacks products (ZipZip, BRB, …). Flask app served by gunicorn on **127.0.0.1:9010** under supervisor, behind CloudPanel's nginx — same layout as ZipZip.
 
 ## Layout
 
