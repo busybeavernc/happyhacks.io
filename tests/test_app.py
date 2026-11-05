@@ -17,6 +17,10 @@ class SiteTests(unittest.TestCase):
         self.assertEqual(self.client.get("/products/doppleganger").status_code, 200)
         self.assertEqual(self.client.get("/products/nope").status_code, 404)
 
+    def test_footer_names_the_company(self):
+        for path in ("/", "/about", "/products/zipzip"):
+            self.assertIn("Busy Beaver Group LLC", self.client.get(path).get_data(as_text=True), path)
+
     def test_static_css(self):
         self.assertEqual(self.client.get("/static/css/site.css").status_code, 200)
 

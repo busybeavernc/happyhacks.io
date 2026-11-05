@@ -75,6 +75,8 @@ h1, h2, h3, .brand { font-family: Fredoka, Nunito, sans-serif; color: var(--plum
 .brand-light span { color: var(--cream); }
 .foot-tag { font-family: Fredoka, sans-serif; color: var(--lavender); margin: 0; font-size: 18px; }
 .foot-copy { margin: 0; font-size: 14px; color: color-mix(in srgb, var(--cream) 70%, var(--plum)); }
+.foot-legal { flex-basis: 100%; margin: 4px 0 0; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--cream) 18%, var(--plum));
+  font-size: 13px; color: color-mix(in srgb, var(--cream) 70%, var(--plum)); }
 
 @media (max-width: 820px) {
   .hero { padding-top: 16px; }
