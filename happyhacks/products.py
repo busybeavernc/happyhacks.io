@@ -25,7 +25,7 @@ PRODUCTS = [
         "description": (
             "BRB (Be Right Back) switches between your live camera and a short recorded loop of you, so you can take "
             "a quick break from a video meeting without distracting anyone. Works with the major meeting apps. "
-            "For Windows 10/11 and macOS 12+."
+            "For Windows 10/11 and macOS 13+."
         ),
         "status": "Windows & Mac",
         "icon": "img/apps/doppleganger.png",
