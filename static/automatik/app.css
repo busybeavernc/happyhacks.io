@@ -55,6 +55,8 @@ code { font-size: 14px; background: var(--card); padding: 1px 4px; border-radius
 .msg.ai { align-self: flex-start; background: var(--card); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
 .msg.err { border-color: var(--warn); color: var(--warn); }
 .msg .att { font-size: 13px; opacity: .85; }
+.msg .dur { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.msg.err .dur { color: inherit; opacity: .8; }
 .card { align-self: flex-start; max-width: 92%; background: var(--card); border: 1px solid var(--accent); border-radius: 12px; padding: 10px 12px; }
 .card h3 { margin: 0 0 6px; font-size: 15px; }
 .card dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; font-size: 14px; }

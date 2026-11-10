@@ -2,7 +2,7 @@
 // the PC with WebCrypto (ECDH P-256 -> HKDF-SHA256 -> AES-256-GCM). The relay (this site) only
 // stores ciphertext. Devices are added only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.10-2";
+const VERSION = "2026.11.10-3";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -193,26 +193,37 @@ function openQuick() {
 function closeQuick() {
   $("quick-menu").hidden = true; $("quick").setAttribute("aria-expanded", "false");
 }
+// "0:42" while waiting; "1m 12s" once answered (measured on this phone, from send to final reply)
+function clock(ms) { const s = Math.floor(ms / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
+function took(ms) {
+  if (ms == null) return "";
+  const s = Math.round(ms / 1000);
+  return s < 60 ? s + "s" : Math.floor(s / 60) + "m " + String(s % 60).padStart(2, "0") + "s";
+}
+function durLabel(ms, err) { const t = document.createElement("div"); t.className = "dur"; t.textContent = (err ? "Failed after " : "Answered in ") + took(ms); return t; }
 function addMsg(who, text, extra) {
   const d = document.createElement("div"); d.className = "msg " + who + (extra && extra.err ? " err" : "");
   d.textContent = text;
   if (extra && extra.files && extra.files.length) {
     const a = document.createElement("div"); a.className = "att"; a.textContent = "📎 " + extra.files.join(", "); d.append(a);
   }
+  if (extra && extra.ms != null) d.append(durLabel(extra.ms, extra.err));
   $("log").append(d); d.scrollIntoView({ block: "end" });
-  saveHistory(who, text);
+  if (!(extra && extra.noSave)) saveHistory(who, text, extra && extra.ms, extra && extra.err);
   return d;
 }
-function saveHistory(who, text) {
+function saveHistory(who, text, ms, err) {
   try {
     const h = JSON.parse(localStorage.getItem("h_" + conversation) || "[]");
-    h.push([who, text]); localStorage.setItem("h_" + conversation, JSON.stringify(h.slice(-100)));
+    h.push(ms != null ? [who, text, ms, !!err] : [who, text]); localStorage.setItem("h_" + conversation, JSON.stringify(h.slice(-100)));
   } catch (e) {}
 }
 function restoreHistory() {
   $("log").innerHTML = "";
-  try { for (const [who, text] of JSON.parse(localStorage.getItem("h_" + conversation) || "[]")) {
-    const d = document.createElement("div"); d.className = "msg " + who; d.textContent = text; $("log").append(d); } } catch (e) {}
+  try { for (const [who, text, ms, err] of JSON.parse(localStorage.getItem("h_" + conversation) || "[]")) {
+    const d = document.createElement("div"); d.className = "msg " + who + (err ? " err" : ""); d.textContent = text;
+    if (ms != null) d.append(durLabel(ms, err));
+    $("log").append(d); } } catch (e) {}
 }
 function draftCard(d) {
   const c = document.createElement("div"); c.className = "card";
@@ -248,9 +259,9 @@ const RECENTS_MAX = 50;
 function readRecents() { try { return JSON.parse(localStorage.getItem("recents") || "[]"); } catch (e) { return []; } }
 function writeRecents(list) { try { localStorage.setItem("recents", JSON.stringify(list.slice(0, RECENTS_MAX))); } catch (e) {} }
 function addRecent(entry) { const list = readRecents(); list.unshift(entry); writeRecents(list); return entry.id; }
-function finishRecent(id, reply) {
+function finishRecent(id, reply, ms) {
   const list = readRecents(); const r = list.find((x) => x.id === id);
-  if (r) { r.reply = reply; writeRecents(list); }
+  if (r) { r.reply = reply; r.ms = ms; writeRecents(list); }
 }
 function replyText(reply) {
   if (!reply) return "No reply was received.";
@@ -276,6 +287,7 @@ function openRecents() {
     if (r.files && r.files.length) { const f = document.createElement("span"); f.textContent = (r.files.some((n) => /^voice-note/.test(n)) ? "🎙 " : "📎 ") + r.files.length; when.append(f); }
     if (r.mode === "send_now") { const m = document.createElement("span"); m.textContent = "sent at once"; when.append(m); }
     if (!r.reply) { const m = document.createElement("span"); m.textContent = "no reply"; when.append(m); }
+    if (r.ms != null) { const m = document.createElement("span"); m.textContent = "⏱ " + took(r.ms); when.append(m); }
     const what = document.createElement("div"); what.className = "what"; what.textContent = r.text || "(attachment only)";
     head.append(when, what);
     const acts = document.createElement("div"); acts.className = "acts"; acts.hidden = true;
@@ -313,24 +325,33 @@ async function sendChat(ev) {
   const recentId = addRecent({ id: hex(6), ts: Date.now(), text, files, mode: $("send-now").checked ? "send_now" : "approve", conversation });
   addMsg("me", text || "(attachment)", { files });
   $("text").value = ""; $("send").disabled = true;
-  const wait = addMsg("ai", "…");
+  const t0 = Date.now();
+  let status = "Sending…";
+  const wait = addMsg("ai", status + " 0:00", { noSave: true });
+  const tick = setInterval(() => (wait.textContent = status + " " + clock(Date.now() - t0)), 1000);
   try {
     const attachments = await readFiles();
     pendingFiles = []; renderFiles();
     const mode = $("send-now").checked ? "send_now" : "approve";
-    const r = await call("chat", { text, conversation, attachments, mode }, (s) => (wait.textContent = s === "working" ? "The PC is working on it…" : "Waiting for the PC…"));
-    wait.remove();
-    finishRecent(recentId, { text: r.text, error: r.error, drafts: r.drafts, sends: r.sends });
-    if (r.error) addMsg("ai", r.error, { err: true });
+    status = "Waiting for Face ID…";
+    const r = await call("chat", { text, conversation, attachments, mode }, (s) => (status = s === "working" ? "Working…" : "Waiting for the PC…"));
+    clearInterval(tick); wait.remove();
+    const ms = Date.now() - t0;
+    finishRecent(recentId, { text: r.text, error: r.error, drafts: r.drafts, sends: r.sends }, ms);
+    if (r.error) addMsg("ai", r.error, { err: true, ms });
     else {
-      addMsg("ai", r.text || "(no text)");
+      addMsg("ai", r.text || "(no text)", { ms });
       for (const d of r.drafts || []) {
         const sent = (r.sends || []).find((s) => s.draft === d.draft);
         if (sent) addMsg("ai", sent.sent ? "Sent: " + (d.subject || "email") : "Not sent: " + (sent.error || ""), { err: !sent.sent });
         else draftCard(d);
       }
     }
-  } catch (e) { wait.remove(); finishRecent(recentId, { error: e.message }); addMsg("ai", e.message, { err: true }); }
+  } catch (e) {
+    clearInterval(tick); wait.remove();
+    const ms = Date.now() - t0;
+    finishRecent(recentId, { error: e.message }, ms); addMsg("ai", e.message, { err: true, ms });
+  }
   finally { $("send").disabled = false; $("send-now").checked = false; }
 }
 function renderFiles() {
