@@ -2,7 +2,7 @@
 // the PC with WebCrypto (ECDH P-256 -> HKDF-SHA256 -> AES-256-GCM). The relay (this site) only
 // stores ciphertext. Devices are added only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.10-5";
+const VERSION = "2026.11.10-6";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -147,29 +147,59 @@ async function call(type, body, onStatus) {
 }
 
 // ---------- chat ----------
-const CHIPS = [
-  ["Outlook", [["Today's meetings", "What meetings do I have today?"], ["Tomorrow", "What meetings do I have tomorrow?"],
-               ["Unread work mail", "Any unread work emails today?"], ["New email…", "Draft a work email to ", true]]],
-  ["Happy Hacks", [["New mail today", "Any new email in my Happy Hacks mailbox today?"], ["Draft an email…", "Draft a Happy Hacks email to ", true]]],
-  ["Family", [["Today", "What's on the family calendar today?"], ["This week", "What's on the family calendar this week?"],
-              ["Shopping list", "What's on the shopping list?"]]],
-  ["OneDrive", [["Recent files", "What are my most recent OneDrive files?"], ["Shared with me", "What files were shared with me recently?"],
-                ["Search files…", "Find the file ", true], ["Summarise a document…", "Summarise the document ", true]]],
-  ["Ariba", [["My last 3 requests", "What's the status of my last 3 Ariba requests?"], ["Waiting on me", "Is anything waiting for my approval in Ariba?"],
-             ["Find supplier…", "Is this a valid supplier: ", true]]],
-  ["Status", [["Is everything working?", "Is everything in Automatik working?"], ["Morning brief", "Show me today's morning brief."]]],
+// Quick options, two levels (user, 2026-11-10): area -> tool -> choice. An area with no tools shows "No tools yet".
+const QUICK = [
+  ["Syngenta", [
+    ["Outlook", [["Today's meetings", "What meetings do I have today?"], ["Tomorrow", "What meetings do I have tomorrow?"],
+                 ["Unread work mail", "Any unread work emails today?"], ["New email…", "Draft a work email to ", true]]],
+    ["Ariba", [["My last 3 requests", "What's the status of my last 3 Ariba requests?"], ["Waiting on me", "Is anything waiting for my approval in Ariba?"],
+               ["Find supplier…", "Is this a valid supplier: ", true]]],
+    ["OneDrive", [["Recent files", "What are my most recent OneDrive files?"], ["Shared with me", "What files were shared with me recently?"],
+                  ["Search files…", "Find the file ", true], ["Summarise a document…", "Summarise the document ", true]]],
+    ["Alation", [["Find a table…", "In SmartMart, which table has ", true], ["What does a MIO mean…", "What does this MIO measure: ", true]]],
+  ]],
+  ["HappyHacks", [
+    ["Mail", [["New mail today", "Any new email in my Happy Hacks mailbox today?"], ["Unread mail", "Any unread email in my Happy Hacks mailbox?"],
+              ["Draft an email…", "Draft a Happy Hacks email to ", true]]],
+  ]],
+  ["Busy Beaver", []],
+  ["Personal", [
+    ["Family", [["Today", "What's on the family calendar today?"], ["This week", "What's on the family calendar this week?"],
+                ["Shopping list", "What's on the shopping list?"]]],
+  ]],
+  ["Automatik", [
+    ["Status", [["Is everything working?", "Is everything in Automatik working?"], ["Morning brief", "Show me today's morning brief."]]],
+  ]],
 ];
-// Quick options: one button by the message box opens a menu, one collapsible section per tool.
-// A choice sends at once, or fills the box when it needs more (those end in "…"). The menu closes on a
-// choice, a tap outside it, or Escape.
+// Quick options: ☰ in the header opens a menu: areas (Syngenta, HappyHacks, ...) expand to tools, tools to
+// choices; one area and one tool open at a time. A choice sends at once, or fills the box when it needs more
+// (those end in "…"). The menu closes on a choice, a tap outside it, or Escape.
+function oneOpen(container, sec, level) {
+  sec.addEventListener("toggle", () => {
+    if (sec.open) container.querySelectorAll(":scope > details." + level + "[open]").forEach((d) => d !== sec && (d.open = false));
+  });
+}
 function renderQuickMenu() {
   const menu = $("quick-menu"), btn = $("quick");
-  for (const [group, items] of CHIPS) {
-    const sec = document.createElement("details");
-    const sum = document.createElement("summary"); sum.textContent = group; sec.append(sum);
-    sec.addEventListener("toggle", () => {   // one section open at a time keeps it short on a phone
-      if (sec.open) menu.querySelectorAll("details[open]").forEach((d) => d !== sec && (d.open = false));
-    });
+  for (const [area, tools] of QUICK) {
+    const group = document.createElement("details"); group.className = "area";
+    const gs = document.createElement("summary"); gs.textContent = area; group.append(gs);
+    oneOpen(menu, group, "area");
+    if (!tools.length) { const none = document.createElement("div"); none.className = "none"; none.textContent = "No tools yet"; group.append(none); }
+    for (const [tool, items] of tools) {
+      const sec = document.createElement("details"); sec.className = "tool";
+      const sum = document.createElement("summary"); sum.textContent = tool; sec.append(sum);
+      oneOpen(group, sec, "tool");
+      addItems(sec, items);
+      group.append(sec);
+    }
+    menu.append(group);
+  }
+  btn.onclick = (ev) => { ev.stopPropagation(); menu.hidden ? openQuick() : closeQuick(); };
+  document.addEventListener("click", (ev) => { if (!menu.hidden && !menu.contains(ev.target)) closeQuick(); });
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !menu.hidden) { closeQuick(); btn.focus(); } });
+}
+function addItems(sec, items) {
     for (const [label, text, fill] of items) {
       const it = document.createElement("button"); it.type = "button"; it.className = "item"; it.setAttribute("role", "menuitem");
       it.textContent = label;
@@ -182,16 +212,12 @@ function renderQuickMenu() {
       };
       sec.append(it);
     }
-    menu.append(sec);
-  }
-  btn.onclick = (ev) => { ev.stopPropagation(); menu.hidden ? openQuick() : closeQuick(); };
-  document.addEventListener("click", (ev) => { if (!menu.hidden && !menu.contains(ev.target)) closeQuick(); });
-  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !menu.hidden) { closeQuick(); btn.focus(); } });
 }
 function openQuick() {
   const menu = $("quick-menu");
   menu.hidden = false; $("quick").setAttribute("aria-expanded", "true");
-  const first = menu.querySelector("details"); if (first && !menu.querySelector("details[open]")) first.open = true;
+  // first time: open the first area so the menu isn't just a list of closed headings
+  const first = menu.querySelector("details.area"); if (first && !menu.querySelector("details.area[open]")) first.open = true;
 }
 function closeQuick() {
   $("quick-menu").hidden = true; $("quick").setAttribute("aria-expanded", "false");

@@ -46,11 +46,16 @@ code { font-size: 14px; background: var(--card); padding: 1px 4px; border-radius
               background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.18); padding: 6px; z-index: 10; }
 .quick-menu[hidden] { display: none; }
 .quick-menu details { border-radius: 8px; }
-.quick-menu details + details { border-top: 1px solid var(--line); }
+.quick-menu details.area + details.area { border-top: 1px solid var(--line); }
 .quick-menu summary { list-style: none; cursor: pointer; padding: 10px 10px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+.quick-menu details.area > summary { font-size: 16px; }
+.quick-menu details.tool { margin-left: 12px; }
+.quick-menu details.tool > summary { font-weight: 500; padding: 8px 10px; }
+.quick-menu details.tool .item { padding-left: 24px; }
+.quick-menu .none { color: var(--muted); font-size: 14px; padding: 4px 10px 10px 22px; }
 .quick-menu summary::-webkit-details-marker { display: none; }
 .quick-menu summary::after { content: "›"; color: var(--muted); transition: transform .15s; font-size: 18px; line-height: 1; }
-.quick-menu details[open] summary::after { transform: rotate(90deg); }
+.quick-menu details[open] > summary::after { transform: rotate(90deg); }
 .quick-menu .item { display: block; width: 100%; text-align: left; border: 0; background: none; color: var(--ink); padding: 9px 10px 9px 22px;
                     border-radius: 8px; font-size: 15px; }
 .quick-menu .item:hover, .quick-menu .item:focus-visible { background: var(--bg); outline: none; }
