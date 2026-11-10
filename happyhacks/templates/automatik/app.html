@@ -15,6 +15,10 @@
 </head>
 <body>
 <header class="bar">
+  <div class="quick" id="quick-wrap" hidden>
+    <button type="button" id="quick" class="icon" aria-label="Quick options" aria-haspopup="menu" aria-expanded="false" title="Quick options">☰</button>
+    <div id="quick-menu" class="quick-menu" role="menu" hidden></div>
+  </div>
   <span class="title">Automatik</span>
   <span id="pc" class="pc" title="Is the PC connected?">…</span>
   <nav class="tabs" role="tablist">
@@ -22,6 +26,7 @@
     <button role="tab" data-tab="dash">Dashboard</button>
     <button role="tab" data-tab="alerts">Alerts <span id="alertdot" class="dot" hidden></span></button>
   </nav>
+  <button type="button" id="recents" class="icon" aria-label="Recent requests" aria-haspopup="dialog" aria-expanded="false" title="Recent requests" hidden>🕘</button>
 </header>
 
 <main>
@@ -50,13 +55,6 @@
     <form id="composer" class="composer">
       <div id="files" class="files"></div>
       <div class="row">
-        <div class="quick">
-          <button type="button" id="quick" class="icon" aria-label="Quick options" aria-haspopup="menu" aria-expanded="false" title="Quick options">☰</button>
-          <div id="quick-menu" class="quick-menu" role="menu" hidden></div>
-        </div>
-        <div class="quick">
-          <button type="button" id="recents" class="icon" aria-label="Recent requests" aria-haspopup="dialog" aria-expanded="false" title="Recent requests">🕘</button>
-        </div>
         <button type="button" id="attach" class="icon" aria-label="Attach files">＋</button>
         <input type="file" id="file-input" multiple hidden accept="image/*,audio/*,text/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
         <button type="button" id="mic" class="icon" aria-label="Record a voice note">🎙</button>

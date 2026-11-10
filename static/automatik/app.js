@@ -2,7 +2,7 @@
 // the PC with WebCrypto (ECDH P-256 -> HKDF-SHA256 -> AES-256-GCM). The relay (this site) only
 // stores ciphertext. Devices are added only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.10-3";
+const VERSION = "2026.11.10-4";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -174,6 +174,7 @@ function renderQuickMenu() {
       if (fill) { const h = document.createElement("span"); h.className = "hint"; h.textContent = " · you finish it"; it.append(h); }
       it.onclick = () => {
         closeQuick();
+        show("chat");
         $("text").value = text;
         if (fill) { $("text").focus(); $("text").setSelectionRange(text.length, text.length); } else sendChat();
       };
@@ -463,6 +464,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (e) { $("setup-none").hidden = true; $("setup-form").hidden = false;
       $("setup-form").onsubmit = async (ev) => { ev.preventDefault(); try { await enrol(e); } catch (err) { $("setup-msg").textContent = err.message; } }; }
   } else {
+    $("quick-wrap").hidden = false; $("recents").hidden = false;   // header buttons, once this phone is set up
     show("chat"); renderQuickMenu(); restoreHistory();
     $("recents").onclick = (ev) => { ev.stopPropagation(); openRecents(); };
     $("sheet-close").onclick = closeRecents;
