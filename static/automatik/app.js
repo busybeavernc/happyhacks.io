@@ -1,8 +1,10 @@
-// Automatik phone app. Every request is signed with this phone's passkey (Face ID) and encrypted to
-// the PC with WebCrypto (ECDH P-256 -> HKDF-SHA256 -> AES-256-GCM). The relay (this site) only
-// stores ciphertext. Devices are added only with a code made on the PC; there is no other way.
+// Automatik phone app. Requests are encrypted to the PC with WebCrypto (ECDH P-256 -> HKDF-SHA256 ->
+// AES-256-GCM) and signed: with this phone's passkey (Face ID) to unlock a session, then with that
+// session's key (made here, private half non-extractable) until the PC ends it (30 min idle, 8 h max).
+// Sending email always needs Face ID. The relay (this site) only stores ciphertext. Devices are added
+// only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.10-7";
+const VERSION = "2026.11.10-8";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -70,7 +72,11 @@ async function postAndWait(msg, token, key, onStatus) {
     await sleep(1500);
     const r = await relay("/result/" + id, { method: "GET" }, token);
     if (r.status === "done") {
-      if (r.error) throw new Error(r.error === "refused" ? "The PC refused that request." : r.error);
+      if (r.error) {
+        const err = new Error(r.error === "refused" ? "The PC refused that request." :
+                              r.error === "session_expired" ? "The session ended; unlock with Face ID." : r.error);
+        err.code = r.error; throw err;
+      }
       return unseal(key, r.box);
     }
     if (r.status === "gone") throw new Error("The request expired before the PC answered.");
@@ -85,12 +91,16 @@ let token = null;
 let theKey = null;      // AES key shared with the PC
 let conversation = null;
 let pendingFiles = [];
+let session = null;     // {priv (non-extractable ECDSA key), started, last, idle, max}: kept in IndexedDB
+let unlocking = null;
 
 async function load() {
   device = await kvGet("device");
   token = await kvGet("token");
   const priv = await kvGet("boxPrivate");
   if (device && priv) theKey = await boxKey(priv, unb64(device.pcPublic));
+  session = (await kvGet("session")) || null;
+  if (!sessionLive()) session = null;
   conversation = localStorage.getItem("conversation") || newConversation();
 }
 function newConversation() { const c = "c" + hex(6); try { localStorage.setItem("conversation", c); } catch (e) {} return c; }
@@ -142,15 +152,73 @@ async function enrol(e) {
 }
 
 // ---------- a signed request ----------
-async function call(type, body, onStatus) {
+// Face ID (passkey) for: opening a session, Approve, "Send emails at once". Everything else is signed
+// with the session key; if the PC says the session ended, Face ID unlocks a new one and it's sent again.
+const SESSION_CONTEXT = "automatik session v1\n";
+const needsFaceId = (type, body) => type === "approve" || type === "session" || (type === "chat" && body && body.mode === "send_now");
+function sessionLive() {
+  if (!session || !session.priv) return false;
+  const now = Date.now(), margin = 60000;     // the PC's clock decides; end a minute early here
+  return now - session.last < session.idle * 1000 - margin && now - session.started < session.max * 1000 - margin;
+}
+async function sendSigned(type, body, sess, onStatus) {
   const payload = JSON.stringify({ v: 1, id: hex(6), ts: Date.now(), nonce: hex(16), token, type, body });
-  const challenge = await crypto.subtle.digest("SHA-256", enc.encode(payload));
-  const a = await navigator.credentials.get({ publicKey: { challenge, rpId: RP_ID, userVerification: "required", timeout: 120000,
-    allowCredentials: [{ type: "public-key", id: unb64url(device.credential) }] } });
-  const assertion = { clientDataJSON: b64url(a.response.clientDataJSON), authenticatorData: b64url(a.response.authenticatorData),
-                      signature: b64url(a.response.signature) };
-  const box = await seal(theKey, { payload, assertion });
+  let inner;
+  if (sess) {
+    const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, sess.priv, enc.encode(SESSION_CONTEXT + payload));
+    inner = { payload, session_sig: b64url(sig) };
+  } else {
+    const challenge = await crypto.subtle.digest("SHA-256", enc.encode(payload));
+    const a = await navigator.credentials.get({ publicKey: { challenge, rpId: RP_ID, userVerification: "required", timeout: 120000,
+      allowCredentials: [{ type: "public-key", id: unb64url(device.credential) }] } });
+    inner = { payload, assertion: { clientDataJSON: b64url(a.response.clientDataJSON),
+              authenticatorData: b64url(a.response.authenticatorData), signature: b64url(a.response.signature) } };
+  }
+  const box = await seal(theKey, inner);
   return postAndWait({ device: device.id, box }, token, theKey, onStatus);
+}
+async function dropSession() { session = null; try { await kvSet("session", null); } catch (e) {} renderLock(); }
+async function unlock(onStatus) {
+  if (unlocking) return unlocking;           // two requests at once: one Face ID
+  unlocking = (async () => {
+    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+    const raw = await crypto.subtle.exportKey("raw", pair.publicKey);
+    const r = await sendSigned("session", { key: b64(raw) }, null, onStatus);
+    if (r.type !== "session") throw new Error("The PC didn't open a session.");
+    const now = Date.now();
+    session = { priv: pair.privateKey, started: now, last: now, idle: r.idle_s, max: r.max_s };
+    try { await kvSet("session", session); } catch (e) {}
+    renderLock();
+  })().finally(() => (unlocking = null));
+  return unlocking;
+}
+async function lockNow() {
+  const s = session; await dropSession();
+  if (s && s.priv) { try { await sendSigned("end_session", {}, s); } catch (e) {} }   // the PC forgets it too
+}
+async function call(type, body, onStatus, onFaceId) {
+  if (needsFaceId(type, body)) { onFaceId && onFaceId(); return sendSigned(type, body, null, onStatus); }
+  for (let attempt = 0; ; attempt++) {
+    if (!sessionLive()) { onFaceId && onFaceId(); await unlock(onStatus); }
+    try {
+      const r = await sendSigned(type, body, session, onStatus);
+      if (session) { session.last = Date.now(); kvSet("session", session).catch(() => {}); }
+      renderLock();
+      return r;
+    } catch (e) {
+      if (e.code === "session_expired" && attempt === 0) { await dropSession(); continue; }   // e.g. the PC restarted
+      if (e.code === "passkey_needed") { onFaceId && onFaceId(); return sendSigned(type, body, null, onStatus); }
+      throw e;
+    }
+  }
+}
+function renderLock() {
+  const b = $("lock"); if (!b) return;
+  const live = sessionLive();
+  b.textContent = live ? "🔓" : "🔒";
+  b.title = live ? "Unlocked: tap to lock (Face ID again next time)" : "Locked: tap to unlock with Face ID";
+  b.setAttribute("aria-label", b.title);
+  b.classList.toggle("open", live);
 }
 
 // ---------- chat ----------
@@ -369,8 +437,8 @@ async function sendChat(ev) {
     const attachments = await readFiles();
     pendingFiles = []; renderFiles();
     const mode = $("send-now").checked ? "send_now" : "approve";
-    status = "Waiting for Face ID…";
-    const r = await call("chat", { text, conversation, attachments, mode }, (s) => (status = s === "working" ? "Working…" : "Waiting for the PC…"));
+    const r = await call("chat", { text, conversation, attachments, mode }, (s) => (status = s === "working" ? "Working…" : "Waiting for the PC…"),
+                         () => (status = "Waiting for Face ID…"));
     clearInterval(tick); wait.remove();
     const ms = Date.now() - t0;
     finishRecent(recentId, { text: r.text, error: r.error, drafts: r.drafts, sends: r.sends }, ms);
@@ -501,7 +569,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       const p = enrolFrom($("paste-link").value);
       if (p) showEnrolForm(p); else $("paste-msg").textContent = "That isn't an enrolment link from the PC. Copy the whole link it gave you."; };
   } else {
-    $("quick-wrap").hidden = false; $("recents").hidden = false;   // header buttons, once this phone is set up
+    $("quick-wrap").hidden = false; $("recents").hidden = false; $("lock").hidden = false;   // header buttons, once this phone is set up
+    renderLock(); setInterval(renderLock, 30000);
+    $("lock").onclick = async () => {
+      if (sessionLive()) return lockNow();
+      try { await unlock(); } catch (e) { if (e.name !== "NotAllowedError") alert(e.message); }
+    };
     show("chat"); renderQuickMenu(); restoreHistory();
     $("recents").onclick = (ev) => { ev.stopPropagation(); openRecents(); };
     $("sheet-close").onclick = closeRecents;

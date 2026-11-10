@@ -17,6 +17,10 @@ body { background: var(--bg); color: var(--ink); font: 16px/1.4 -apple-system, B
 .bar [hidden] { display: none; }
 /* Top row: ☰ Quick options, title, PC status, 🕘 Recents (right). Second row: the tabs. */
 .bar #recents { margin-left: auto; order: 4; }
+/* 🔒/🔓 session lock, just left of Recents */
+.bar #lock { margin-left: auto; order: 4; }
+.bar #lock:not([hidden]) ~ #recents { margin-left: 0; }
+.icon.lock.open { border-color: var(--ok); }
 .title { font-weight: 700; }
 .pc { font-size: 12px; color: var(--muted); }
 .pc.on { color: var(--ok); } .pc.off { color: var(--warn); }
