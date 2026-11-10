@@ -2,7 +2,7 @@
 // the PC with WebCrypto (ECDH P-256 -> HKDF-SHA256 -> AES-256-GCM). The relay (this site) only
 // stores ciphertext. Devices are added only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.09-2";
+const VERSION = "2026.11.10-1";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -150,25 +150,48 @@ async function call(type, body, onStatus) {
 const CHIPS = [
   ["Outlook", [["Today's meetings", "What meetings do I have today?"], ["Tomorrow", "What meetings do I have tomorrow?"],
                ["Unread work mail", "Any unread work emails today?"], ["New email…", "Draft a work email to ", true]]],
-  ["Happy Hacks mail", [["New mail today", "Any new email in my Happy Hacks mailbox today?"], ["Draft an email…", "Draft a Happy Hacks email to ", true]]],
+  ["Happy Hacks", [["New mail today", "Any new email in my Happy Hacks mailbox today?"], ["Draft an email…", "Draft a Happy Hacks email to ", true]]],
   ["Family", [["Today", "What's on the family calendar today?"], ["This week", "What's on the family calendar this week?"],
               ["Shopping list", "What's on the shopping list?"]]],
   ["Ariba", [["My last 3 requests", "What's the status of my last 3 Ariba requests?"], ["Waiting on me", "Is anything waiting for my approval in Ariba?"],
              ["Find supplier…", "Is this a valid supplier: ", true]]],
   ["Status", [["Is everything working?", "Is everything in Automatik working?"], ["Morning brief", "Show me today's morning brief."]]],
 ];
-function renderChips() {
-  const box = $("chips");
+// Quick options: one button by the message box opens a menu, one collapsible section per tool.
+// A choice sends at once, or fills the box when it needs more (those end in "…"). The menu closes on a
+// choice, a tap outside it, or Escape.
+function renderQuickMenu() {
+  const menu = $("quick-menu"), btn = $("quick");
   for (const [group, items] of CHIPS) {
-    const g = document.createElement("div"); g.className = "chip-group";
-    const b = document.createElement("b"); b.textContent = group; g.append(b);
+    const sec = document.createElement("details");
+    const sum = document.createElement("summary"); sum.textContent = group; sec.append(sum);
+    sec.addEventListener("toggle", () => {   // one section open at a time keeps it short on a phone
+      if (sec.open) menu.querySelectorAll("details[open]").forEach((d) => d !== sec && (d.open = false));
+    });
     for (const [label, text, fill] of items) {
-      const c = document.createElement("button"); c.type = "button"; c.className = "chip"; c.textContent = label;
-      c.onclick = () => { if (fill) { $("text").value = text; $("text").focus(); } else { $("text").value = text; sendChat(); } };
-      g.append(c);
+      const it = document.createElement("button"); it.type = "button"; it.className = "item"; it.setAttribute("role", "menuitem");
+      it.textContent = label;
+      if (fill) { const h = document.createElement("span"); h.className = "hint"; h.textContent = " · you finish it"; it.append(h); }
+      it.onclick = () => {
+        closeQuick();
+        $("text").value = text;
+        if (fill) { $("text").focus(); $("text").setSelectionRange(text.length, text.length); } else sendChat();
+      };
+      sec.append(it);
     }
-    box.append(g);
+    menu.append(sec);
   }
+  btn.onclick = (ev) => { ev.stopPropagation(); menu.hidden ? openQuick() : closeQuick(); };
+  document.addEventListener("click", (ev) => { if (!menu.hidden && !menu.contains(ev.target)) closeQuick(); });
+  document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !menu.hidden) { closeQuick(); btn.focus(); } });
+}
+function openQuick() {
+  const menu = $("quick-menu");
+  menu.hidden = false; $("quick").setAttribute("aria-expanded", "true");
+  const first = menu.querySelector("details"); if (first && !menu.querySelector("details[open]")) first.open = true;
+}
+function closeQuick() {
+  $("quick-menu").hidden = true; $("quick").setAttribute("aria-expanded", "false");
 }
 function addMsg(who, text, extra) {
   const d = document.createElement("div"); d.className = "msg " + who + (extra && extra.err ? " err" : "");
@@ -355,7 +378,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (e) { $("setup-none").hidden = true; $("setup-form").hidden = false;
       $("setup-form").onsubmit = async (ev) => { ev.preventDefault(); try { await enrol(e); } catch (err) { $("setup-msg").textContent = err.message; } }; }
   } else {
-    show("chat"); renderChips(); restoreHistory();
+    show("chat"); renderQuickMenu(); restoreHistory();
     $("composer").onsubmit = sendChat;
     $("text").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey && !matchMedia("(pointer: coarse)").matches) sendChat(ev); });
     $("attach").onclick = () => $("file-input").click();

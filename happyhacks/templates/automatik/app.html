@@ -46,11 +46,14 @@
   </section>
 
   <section id="chat" class="panel" hidden>
-    <div id="chips" class="chips"></div>
     <div id="log" class="log" aria-live="polite"></div>
     <form id="composer" class="composer">
       <div id="files" class="files"></div>
       <div class="row">
+        <div class="quick">
+          <button type="button" id="quick" class="icon" aria-label="Quick options" aria-haspopup="menu" aria-expanded="false" title="Quick options">☰</button>
+          <div id="quick-menu" class="quick-menu" role="menu" hidden></div>
+        </div>
         <button type="button" id="attach" class="icon" aria-label="Attach files">＋</button>
         <input type="file" id="file-input" multiple hidden accept="image/*,audio/*,text/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
         <button type="button" id="mic" class="icon" aria-label="Record a voice note">🎙</button>
