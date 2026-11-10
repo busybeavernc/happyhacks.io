@@ -4,7 +4,7 @@
 // Sending email always needs Face ID. The relay (this site) only stores ciphertext. Devices are added
 // only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.10-8";
+const VERSION = "2026.11.10-9";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -522,6 +522,8 @@ async function loadAlerts(show) {
     const { alerts } = await relay("/alerts", { method: "GET" }, token);
     const seen = Number(localStorage.getItem("alertsSeen") || 0);
     $("alertdot").hidden = !alerts.some((a) => a.created > seen);
+    const pattySeen = Number(localStorage.getItem("pattySeen") || 0);
+    $("pattydot").hidden = !alerts.some((a) => a.created > pattySeen && /^Patty/.test(a.text));
     if (show) {
       const box = $("alerts-body"); box.innerHTML = "";
       if (!alerts.length) box.textContent = "No alerts.";
@@ -534,6 +536,130 @@ async function loadAlerts(show) {
     }
   } catch (e) {}
 }
+// ---------- Patty (assistant) ----------
+const KIND_LABEL = { info: "For you", suggestion: "Suggestion", draft: "Draft idea", question: "Question", budget: "Budget", report: "Day report" };
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function money(v) { return "$" + Number(v || 0).toFixed(2); }
+async function loadPatty() {
+  const body = $("patty-body"); body.textContent = "Loading…";
+  try {
+    const d = await call("patty", {});
+    if (d.error) { body.textContent = d.error; return; }
+    const b = d.budget || {};
+    $("patty-budget").textContent = b.patty_weekly_cap_usd != null
+      ? "This week " + money(b.spent_week_usd) + " of " + money(b.patty_weekly_cap_usd) + " (" + Math.round(b.week_used_pct || 0) + "%) · today " + money(b.spent_today_usd) + " · " + d.prepared + " answers ready"
+      : "";
+    body.innerHTML = "";
+    const posts = d.posts || [];
+    if (!posts.length) body.append(el("p", "muted", "Nothing from Patty yet. She posts here as she learns your routine."));
+    for (const p of posts) body.append(postCard(p));
+    const unseen = posts.filter((p) => !p.seen).map((p) => p.id);
+    if (unseen.length) call("patty_seen", { ids: unseen }).catch(() => {});
+    $("pattydot").hidden = true;
+    try { localStorage.setItem("pattySeen", String(Date.now() / 1000)); } catch (e) {}
+  } catch (e) { body.textContent = e.message; }
+}
+function postCard(p) {
+  const c = el("div", "post" + (p.seen ? "" : " unread") + (p.urgent ? " urgent" : ""));
+  const meta = el("div", "meta");
+  meta.append(el("span", "kind", KIND_LABEL[p.kind] || p.kind),
+              el("span", null, new Date(p.ts).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })));
+  if (p.urgent) meta.append(el("span", null, "urgent"));
+  c.append(meta, el("h3", null, p.title), el("div", "text", p.text || ""));
+  if (p.draft) {
+    const d = p.draft, lines = [];
+    if (d.account) lines.push("From: " + (d.account === "outlook" ? "Outlook (Syngenta)" : "Happy Hacks"));
+    if (d.to && d.to.length) lines.push("To: " + d.to.join(", "));
+    if (d.cc && d.cc.length) lines.push("Cc: " + d.cc.join(", "));
+    if (d.subject) lines.push("Subject: " + d.subject);
+    c.append(el("div", "draft", lines.join("\n") + "\n\n" + (d.body || "")));
+  }
+  if (p.ask) {
+    // The user confirms: the request lands in the composer; they check it and tap Send. The Supervisor then
+    // makes the real draft, which still needs their Approve.
+    const go = el("button", "primary", "Send to Supervisor"); go.type = "button";
+    go.onclick = () => { $("text").value = p.ask; show("chat"); $("text").focus(); $("text").dispatchEvent(new Event("input")); };
+    const row = el("div", "fb");
+    row.append(go, el("span", "muted", "You check it, then tap ➤. The Supervisor makes the draft for your approval."));
+    c.append(row);
+  }
+  const fb = p.feedback || {};
+  const row = el("div", "fb");
+  const note = el("textarea"); note.rows = 2; note.maxLength = 1000;
+  note.placeholder = p.kind === "question" ? "Your answer…" : "Tell Patty (optional)…";
+  note.value = fb.text || "";
+  const up = el("button", "icon" + (fb.rating === "up" ? " on" : ""), "👍"); up.type = "button"; up.setAttribute("aria-label", "Helpful");
+  const down = el("button", "icon" + (fb.rating === "down" ? " on" : ""), "👎"); down.type = "button"; down.setAttribute("aria-label", "Not needed right now");
+  const send = el("button", "link", p.kind === "question" ? "Send answer" : "Send note"); send.type = "button";
+  const given = el("div", "given", fb.ts ? "Sent " + new Date(fb.ts).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) : "");
+  let rating = fb.rating || null;
+  async function save(r) {
+    if (r !== undefined) rating = rating === r ? null : r;
+    given.textContent = "Sending…";
+    try {
+      const res = await call("patty_feedback", { id: p.id, rating, text: note.value.trim() });
+      if (res.error) throw new Error(res.error);
+      up.classList.toggle("on", rating === "up"); down.classList.toggle("on", rating === "down");
+      given.textContent = "Thanks, Patty got it.";
+    } catch (e) { given.textContent = e.message; }
+  }
+  up.onclick = () => save("up"); down.onclick = () => save("down"); send.onclick = () => save(undefined);
+  if (p.kind !== "report" && p.kind !== "budget") row.append(up, down);
+  row.append(note, send);
+  c.append(row, given);
+  return c;
+}
+
+// ---------- notifications (Web Push sent by the PC) ----------
+const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+async function renderNotify() {
+  const box = $("notify-box"); box.hidden = false;
+  const msg = $("notify-msg"), on = $("notify-on"), off = $("notify-off");
+  if (!pushSupported()) {
+    msg.textContent = standalone() ? "This phone doesn't support notifications for web apps (iOS 16.4 or later is needed)."
+      : "On iPhone, notifications work in the Home Screen app: Share → Add to Home Screen, open it from there, then turn them on.";
+    on.hidden = true; off.hidden = true; return;
+  }
+  if (Notification.permission === "denied") {
+    msg.textContent = "Notifications are blocked for this app. Allow them in iPhone Settings → Notifications → Automatik.";
+    on.hidden = true; off.hidden = true; return;
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  msg.textContent = sub ? "On: Patty's posts and alerts arrive as notifications (no email or calendar details in them)."
+    : "Get a notification when Patty posts something or an alert comes in.";
+  on.hidden = !!sub; off.hidden = !sub;
+}
+async function notifyOn() {
+  const msg = $("notify-msg");
+  try {
+    const perm = await Notification.requestPermission();    // first, straight from the tap (iOS requires it)
+    if (perm !== "granted") { msg.textContent = "Notifications weren't allowed."; return; }
+    msg.textContent = "Turning on…";
+    let key = await kvGet("pushKey");
+    if (!key) {
+      const r = await call("push_key", {});
+      if (!r.key) throw new Error(r.error || "the PC didn't send its key");
+      key = r.key; await kvSet("pushKey", key);
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: unb64url(key) });
+    const r = await call("push_subscribe", { subscription: sub.toJSON() });
+    if (r.error) throw new Error(r.error);
+    await renderNotify();
+    if (r.test_sent) msg.textContent += " A test notification is on its way.";
+  } catch (e) { msg.textContent = "Couldn't turn them on: " + e.message; }
+}
+async function notifyOff() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) { await call("push_unsubscribe", { endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); }
+  } catch (e) {}
+  renderNotify();
+}
+
 async function pcStatus() {
   if (!token) return;
   try { const s = await relay("/status", { method: "GET" }, token);
@@ -543,9 +669,11 @@ async function pcStatus() {
 
 // ---------- tabs, updates, start ----------
 function show(tab) {
-  for (const id of ["setup", "chat", "dash", "alerts"]) $(id).hidden = id !== tab;
+  for (const id of ["setup", "chat", "patty", "dash", "alerts"]) $(id).hidden = id !== tab;
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   if (tab === "alerts") loadAlerts(true);
+  if (tab === "patty" && !$("patty-body").dataset.loaded) { $("patty-body").dataset.loaded = "1"; loadPatty(); }
+  if (tab === "dash") renderNotify().catch(() => {});
 }
 async function watchUpdates() {
   if (!("serviceWorker" in navigator)) return;
@@ -575,7 +703,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (sessionLive()) return lockNow();
       try { await unlock(); } catch (e) { if (e.name !== "NotAllowedError") alert(e.message); }
     };
-    show("chat"); renderQuickMenu(); restoreHistory();
+    const want = (location.hash.match(/^#tab=(\w+)/) || [])[1];
+    show(["patty", "dash", "alerts"].includes(want) ? want : "chat"); renderQuickMenu(); restoreHistory();
+    if (want) history.replaceState(null, "", location.pathname);
+    if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", (ev) => { if (ev.data && ev.data.tab) show(ev.data.tab); });
+    $("patty-refresh").onclick = loadPatty;
+    $("notify-on").onclick = notifyOn; $("notify-off").onclick = notifyOff;
     $("recents").onclick = (ev) => { ev.stopPropagation(); openRecents(); };
     $("sheet-close").onclick = closeRecents;
     $("sheet").onclick = (ev) => { if (ev.target === $("sheet")) closeRecents(); };

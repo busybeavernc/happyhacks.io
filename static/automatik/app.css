@@ -111,3 +111,21 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line
 .update { position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); background: var(--card); border: 1px solid var(--accent);
           border-radius: 12px; padding: 10px 12px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 .update[hidden] { display: none; }
+
+/* Patty (assistant) feed */
+.patty-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.patty-head #patty-budget { flex: 1; font-size: 13px; }
+.post { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+.post.unread { border-color: var(--accent); }
+.post.urgent { border-color: var(--warn); }
+.post .meta { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
+.post .kind { text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.post h3 { margin: 4px 0; font-size: 16px; }
+.post .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.post .draft { background: var(--bg); border-radius: 8px; padding: 8px; margin-top: 8px; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.post .fb { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.post .fb button.icon { width: 36px; height: 36px; }
+.post .fb button.icon.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.post .fb textarea { flex-basis: 100%; }
+.post .given { font-size: 13px; color: var(--muted); margin-top: 6px; white-space: pre-wrap; }
+.notify { margin-bottom: 12px; }

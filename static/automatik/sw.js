@@ -2,7 +2,7 @@
 // downloaded in the background and used only after the user taps "Install update" (it waits until
 // then). API calls (/automatik/api/...) are never cached. Bump CACHE with every app release.
 "use strict";
-const CACHE = "automatik-2026.11.10-8";
+const CACHE = "automatik-2026.11.10-9";
 
 async function fillCache() {
   const c = await caches.open(CACHE);
@@ -29,4 +29,22 @@ self.addEventListener("fetch", (e) => {
   // cache first: the approved version; the network only when it isn't cached yet
   e.respondWith(caches.open(CACHE).then((c) => c.match(isPage ? "/automatik/" : e.request, { ignoreSearch: false })
     .then((hit) => hit || fetch(e.request))));
+});
+
+// Notifications (Web Push from the PC, encrypted end to end; texts are content-free).
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) {}
+  const title = d.title || "Automatik";
+  e.waitUntil(self.registration.showNotification(title, {
+    body: d.body || "Something new for you.", tag: d.tag || "automatik", icon: "/static/icon-192.png",
+    data: { tab: title === "Patty" ? "patty" : "alerts" } }));
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = "/automatik/#tab=" + ((e.notification.data && e.notification.data.tab) || "alerts");
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+    for (const c of list) { if (c.url.includes("/automatik")) { c.postMessage({ tab: e.notification.data && e.notification.data.tab }); return c.focus(); } }
+    return self.clients.openWindow(url);
+  }));
 });

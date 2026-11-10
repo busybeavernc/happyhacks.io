@@ -24,6 +24,7 @@
   <button type="button" id="lock" class="icon lock" aria-label="Locked: tap to unlock with Face ID" title="Locked: tap to unlock with Face ID" hidden>🔒</button>
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
+    <button role="tab" data-tab="patty">Patty <span id="pattydot" class="dot" hidden></span></button>
     <button role="tab" data-tab="dash">Dashboard</button>
     <button role="tab" data-tab="alerts">Alerts <span id="alertdot" class="dot" hidden></span></button>
   </nav>
@@ -73,8 +74,22 @@
     </form>
   </section>
 
+  <section id="patty" class="panel" hidden>
+    <div class="row patty-head">
+      <span id="patty-budget" class="muted"></span>
+      <button id="patty-refresh" class="primary">Refresh</button>
+    </div>
+    <div id="patty-body" class="muted">Patty, your assistant, posts what she notices, suggestions, draft ideas and questions here. Tap Refresh to load.</div>
+  </section>
+
   <section id="dash" class="panel" hidden>
-    <button id="dash-refresh" class="primary">Refresh</button>
+<div id="notify-box" class="card notify" hidden>
+      <h3>Notifications</h3>
+      <p id="notify-msg" class="muted"></p>
+      <div class="actions"><button id="notify-on" class="primary">Turn on notifications</button>
+        <button id="notify-off" class="link" hidden>Turn off</button></div>
+    </div>
+        <button id="dash-refresh" class="primary">Refresh</button>
     <div id="dash-body" class="muted">Tap Refresh to load the PC's status.</div>
   </section>
 
