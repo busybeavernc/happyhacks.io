@@ -54,6 +54,9 @@
           <button type="button" id="quick" class="icon" aria-label="Quick options" aria-haspopup="menu" aria-expanded="false" title="Quick options">☰</button>
           <div id="quick-menu" class="quick-menu" role="menu" hidden></div>
         </div>
+        <div class="quick">
+          <button type="button" id="recents" class="icon" aria-label="Recent requests" aria-haspopup="dialog" aria-expanded="false" title="Recent requests">🕘</button>
+        </div>
         <button type="button" id="attach" class="icon" aria-label="Attach files">＋</button>
         <input type="file" id="file-input" multiple hidden accept="image/*,audio/*,text/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
         <button type="button" id="mic" class="icon" aria-label="Record a voice note">🎙</button>
@@ -75,6 +78,13 @@
   <section id="alerts" class="panel" hidden>
     <div id="alerts-body" class="muted">No alerts.</div>
   </section>
+
+  <div id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
+    <div class="sheet-card">
+      <div class="sheet-head"><h2 id="sheet-title">Recent requests</h2><button type="button" id="sheet-close" class="link">Close</button></div>
+      <div id="sheet-body"></div>
+    </div>
+  </div>
 
   <div id="update" class="update" hidden>
     <span>An update to the app is ready (<span id="update-ver"></span>).</span>

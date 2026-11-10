@@ -2,7 +2,7 @@
 // the PC with WebCrypto (ECDH P-256 -> HKDF-SHA256 -> AES-256-GCM). The relay (this site) only
 // stores ciphertext. Devices are added only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.10-1";
+const VERSION = "2026.11.10-2";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -243,11 +243,74 @@ async function readFiles() {
   for (const f of pendingFiles) out.push({ name: f.name, type: f.type || "application/octet-stream", data: bigB64(new Uint8Array(await f.arrayBuffer())) });
   return out;
 }
+// ---------- recents: the last 50 requests and their replies, kept only on this phone ----------
+const RECENTS_MAX = 50;
+function readRecents() { try { return JSON.parse(localStorage.getItem("recents") || "[]"); } catch (e) { return []; } }
+function writeRecents(list) { try { localStorage.setItem("recents", JSON.stringify(list.slice(0, RECENTS_MAX))); } catch (e) {} }
+function addRecent(entry) { const list = readRecents(); list.unshift(entry); writeRecents(list); return entry.id; }
+function finishRecent(id, reply) {
+  const list = readRecents(); const r = list.find((x) => x.id === id);
+  if (r) { r.reply = reply; writeRecents(list); }
+}
+function replyText(reply) {
+  if (!reply) return "No reply was received.";
+  if (reply.error) return "Error: " + reply.error;
+  const lines = [reply.text || "(no text)"];
+  for (const d of reply.drafts || []) {
+    const s = (reply.sends || []).find((x) => x.draft === d.draft);
+    lines.push("\n✉ Draft: " + (d.subject || "(no subject)") + " to " + (d.to || []).join(", ") +
+               (s ? (s.sent ? " (sent)" : " (not sent: " + (s.error || "") + ")") : " (needed Approve)"));
+  }
+  return lines.join("\n");
+}
+function openRecents() {
+  const body = $("sheet-body"); body.innerHTML = "";
+  const list = readRecents();
+  if (!list.length) { body.textContent = "No requests yet."; }
+  for (const r of list) {
+    const row = document.createElement("div"); row.className = "recent";
+    const head = document.createElement("button"); head.type = "button";
+    const when = document.createElement("div"); when.className = "when";
+    const t = document.createElement("span"); t.textContent = new Date(r.ts).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    when.append(t);
+    if (r.files && r.files.length) { const f = document.createElement("span"); f.textContent = (r.files.some((n) => /^voice-note/.test(n)) ? "🎙 " : "📎 ") + r.files.length; when.append(f); }
+    if (r.mode === "send_now") { const m = document.createElement("span"); m.textContent = "sent at once"; when.append(m); }
+    if (!r.reply) { const m = document.createElement("span"); m.textContent = "no reply"; when.append(m); }
+    const what = document.createElement("div"); what.className = "what"; what.textContent = r.text || "(attachment only)";
+    head.append(when, what);
+    const acts = document.createElement("div"); acts.className = "acts"; acts.hidden = true;
+    const view = document.createElement("div"); view.className = "reply-view"; view.hidden = true; view.textContent = replyText(r.reply);
+    const again = document.createElement("button"); again.type = "button"; again.className = "primary"; again.textContent = "Send again";
+    const show = document.createElement("button"); show.type = "button"; show.className = "link"; show.textContent = "View response";
+    again.onclick = () => resend(r);
+    show.onclick = () => { view.hidden = !view.hidden; show.textContent = view.hidden ? "View response" : "Hide response"; };
+    acts.append(again, show);
+    head.onclick = () => { const open = acts.hidden; body.querySelectorAll(".acts").forEach((a) => (a.hidden = true));
+                           body.querySelectorAll(".reply-view").forEach((v) => (v.hidden = true));
+                           acts.hidden = !open; };
+    row.append(head, acts, view); body.append(row);
+  }
+  $("sheet").hidden = false; $("recents").setAttribute("aria-expanded", "true");
+}
+function closeRecents() { $("sheet").hidden = true; $("recents").setAttribute("aria-expanded", "false"); }
+function resend(r) {
+  // Never repeats a send by itself: a repeat always goes in the normal mode, so any email comes back as a
+  // draft card to Approve again. Attachments aren't kept here; the user re-attaches them if needed.
+  if (r.mode === "send_now" && !confirm("This request sent email at once last time. Send it again? Any email will come back as a draft to approve, not be sent at once.")) return;
+  if (r.files && r.files.length && !confirm("The attachments (" + r.files.join(", ") + ") aren't kept on the phone. Send the text again without them?")) return;
+  closeRecents();
+  show("chat");
+  $("send-now").checked = false;
+  $("text").value = r.text || "";
+  if ($("text").value) sendChat();
+}
+
 async function sendChat(ev) {
   ev && ev.preventDefault();
   const text = $("text").value.trim();
   if (!text && !pendingFiles.length) return;
   const files = pendingFiles.map((f) => f.name);
+  const recentId = addRecent({ id: hex(6), ts: Date.now(), text, files, mode: $("send-now").checked ? "send_now" : "approve", conversation });
   addMsg("me", text || "(attachment)", { files });
   $("text").value = ""; $("send").disabled = true;
   const wait = addMsg("ai", "…");
@@ -257,6 +320,7 @@ async function sendChat(ev) {
     const mode = $("send-now").checked ? "send_now" : "approve";
     const r = await call("chat", { text, conversation, attachments, mode }, (s) => (wait.textContent = s === "working" ? "The PC is working on it…" : "Waiting for the PC…"));
     wait.remove();
+    finishRecent(recentId, { text: r.text, error: r.error, drafts: r.drafts, sends: r.sends });
     if (r.error) addMsg("ai", r.error, { err: true });
     else {
       addMsg("ai", r.text || "(no text)");
@@ -266,7 +330,7 @@ async function sendChat(ev) {
         else draftCard(d);
       }
     }
-  } catch (e) { wait.remove(); addMsg("ai", e.message, { err: true }); }
+  } catch (e) { wait.remove(); finishRecent(recentId, { error: e.message }); addMsg("ai", e.message, { err: true }); }
   finally { $("send").disabled = false; $("send-now").checked = false; }
 }
 function renderFiles() {
@@ -379,6 +443,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       $("setup-form").onsubmit = async (ev) => { ev.preventDefault(); try { await enrol(e); } catch (err) { $("setup-msg").textContent = err.message; } }; }
   } else {
     show("chat"); renderQuickMenu(); restoreHistory();
+    $("recents").onclick = (ev) => { ev.stopPropagation(); openRecents(); };
+    $("sheet-close").onclick = closeRecents;
+    $("sheet").onclick = (ev) => { if (ev.target === $("sheet")) closeRecents(); };
+    document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !$("sheet").hidden) closeRecents(); });
     $("composer").onsubmit = sendChat;
     $("text").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && !ev.shiftKey && !matchMedia("(pointer: coarse)").matches) sendChat(ev); });
     $("attach").onclick = () => $("file-input").click();
