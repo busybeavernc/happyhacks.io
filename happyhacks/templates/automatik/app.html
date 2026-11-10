@@ -33,15 +33,19 @@
   <section id="setup" class="panel" hidden>
     <h1>Add this phone</h1>
     <div id="setup-none">
-      <p>This phone isn't set up yet. Devices can only be added from the PC:</p>
+      <p>This app isn't set up yet. Devices can only be added from the PC:</p>
       <ol>
-        <li>On the PC (or in your Claude session), run <code>python -m remote enroll</code>.</li>
-        <li>Open the link it shows on this phone, in Safari.</li>
-        <li>Add to Home Screen, then open Automatik from the Home Screen.</li>
+        <li>Ask in your Claude session to add a phone (or run <code>python -m remote enroll</code> on the PC).</li>
+        <li>Copy the link it gives you and paste it below. (A Home Screen app keeps its own keys, separate from the browser, so it is set up on its own.)</li>
       </ol>
+      <form id="paste-form">
+        <label>Link from the PC <input id="paste-link" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://happyhacks.io/automatik/#enroll=…"></label>
+        <button type="submit" class="primary">Use this link</button>
+        <p id="paste-msg" class="muted"></p>
+      </form>
     </div>
     <form id="setup-form" hidden>
-      <p>Enrolment code found. Give this phone a name, then create a passkey (Face ID). The PC must be on.</p>
+      <p>Enrolment code found. Give this device a name, then create a passkey (Face ID). The PC must be on.</p>
       <label>Device name <input id="dev-name" autocomplete="off" maxlength="40" value="iPhone"></label>
       <details><summary class="muted">I set my own token on the PC</summary>
         <label>Token <input id="dev-token" type="password" autocomplete="off" minlength="20"></label></details>

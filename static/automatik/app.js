@@ -2,7 +2,7 @@
 // the PC with WebCrypto (ECDH P-256 -> HKDF-SHA256 -> AES-256-GCM). The relay (this site) only
 // stores ciphertext. Devices are added only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.10-6";
+const VERSION = "2026.11.10-7";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -96,9 +96,16 @@ async function load() {
 function newConversation() { const c = "c" + hex(6); try { localStorage.setItem("conversation", c); } catch (e) {} return c; }
 
 // ---------- enrolment (only with a code from the PC) ----------
-function enrolFromHash() {
-  const m = location.hash.match(/^#enroll=([A-Z0-9]{10})\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/);
+function enrolFrom(text) {
+  const m = String(text || "").trim().match(/#enroll=([A-Z0-9]{10})\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/);
   return m ? { code: m[1], challenge: m[2], pcPublic: m[3] } : null;
+}
+function enrolFromHash() { return location.hash.startsWith("#enroll=") ? enrolFrom(location.hash) : null; }
+// The Home Screen app has its own storage on iOS, so a link opened in the browser can't set it up:
+// the link from the PC can be pasted here instead (same single-use code, nothing else changes).
+function showEnrolForm(e) {
+  $("setup-none").hidden = true; $("setup-form").hidden = false;
+  $("setup-form").onsubmit = async (ev) => { ev.preventDefault(); try { await enrol(e); } catch (err) { $("setup-msg").textContent = err.message; } };
 }
 async function enrol(e) {
   const name = $("dev-name").value.trim() || "phone";
@@ -489,8 +496,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   const e = enrolFromHash();
   if (!device) {
     show("setup");
-    if (e) { $("setup-none").hidden = true; $("setup-form").hidden = false;
-      $("setup-form").onsubmit = async (ev) => { ev.preventDefault(); try { await enrol(e); } catch (err) { $("setup-msg").textContent = err.message; } }; }
+    if (e) showEnrolForm(e);
+    $("paste-form").onsubmit = (ev) => { ev.preventDefault();
+      const p = enrolFrom($("paste-link").value);
+      if (p) showEnrolForm(p); else $("paste-msg").textContent = "That isn't an enrolment link from the PC. Copy the whole link it gave you."; };
   } else {
     $("quick-wrap").hidden = false; $("recents").hidden = false;   // header buttons, once this phone is set up
     show("chat"); renderQuickMenu(); restoreHistory();
