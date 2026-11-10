@@ -2,7 +2,7 @@
 // the PC with WebCrypto (ECDH P-256 -> HKDF-SHA256 -> AES-256-GCM). The relay (this site) only
 // stores ciphertext. Devices are added only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.10-4";
+const VERSION = "2026.11.10-5";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -153,6 +153,8 @@ const CHIPS = [
   ["Happy Hacks", [["New mail today", "Any new email in my Happy Hacks mailbox today?"], ["Draft an email…", "Draft a Happy Hacks email to ", true]]],
   ["Family", [["Today", "What's on the family calendar today?"], ["This week", "What's on the family calendar this week?"],
               ["Shopping list", "What's on the shopping list?"]]],
+  ["OneDrive", [["Recent files", "What are my most recent OneDrive files?"], ["Shared with me", "What files were shared with me recently?"],
+                ["Search files…", "Find the file ", true], ["Summarise a document…", "Summarise the document ", true]]],
   ["Ariba", [["My last 3 requests", "What's the status of my last 3 Ariba requests?"], ["Waiting on me", "Is anything waiting for my approval in Ariba?"],
              ["Find supplier…", "Is this a valid supplier: ", true]]],
   ["Status", [["Is everything working?", "Is everything in Automatik working?"], ["Morning brief", "Show me today's morning brief."]]],
