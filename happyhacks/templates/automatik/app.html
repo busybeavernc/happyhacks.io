@@ -36,9 +36,10 @@
       </ol>
     </div>
     <form id="setup-form" hidden>
-      <p>Enrolment code found. Give this phone a name, type your Automatik token, then create a passkey (Face ID).</p>
+      <p>Enrolment code found. Give this phone a name, then create a passkey (Face ID). The PC must be on.</p>
       <label>Device name <input id="dev-name" autocomplete="off" maxlength="40" value="iPhone"></label>
-      <label>Token <input id="dev-token" type="password" autocomplete="off" required minlength="20"></label>
+      <details><summary class="muted">I set my own token on the PC</summary>
+        <label>Token <input id="dev-token" type="password" autocomplete="off" minlength="20"></label></details>
       <button type="submit" class="primary">Create passkey and add this phone</button>
       <p id="setup-msg" class="muted"></p>
     </form>

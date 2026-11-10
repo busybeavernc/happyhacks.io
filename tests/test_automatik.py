@@ -19,6 +19,7 @@ class RelayTests(unittest.TestCase):
                            "AUTOMATIK_RELAY_KEY": KEY, "AUTOMATIK_ALERT_EMAIL": ""})
         from happyhacks import automatik, create_app
         automatik._fails.clear()
+        automatik._enrols.clear()
         self.app = create_app()
         self.c = self.app.test_client()
 
@@ -82,6 +83,23 @@ class RelayTests(unittest.TestCase):
         self.pc("POST", "/automatik/relay/alert", {"level": "urgent", "text": "A new device was enrolled."})
         a = self.phone("GET", "/automatik/api/alerts").json["alerts"]
         self.assertEqual((a[0]["level"], a[0]["text"]), ("urgent", "A new device was enrolled."))
+
+    def test_enrolment_without_token(self):
+        msg = {"enroll": {"box_public": "a2V5", "box": "Ym94"}}
+        rid = self.c.post("/automatik/api/request", json={"msg": msg}).json["id"]
+        self.assertTrue(rid.startswith("e"))
+        self.assertEqual(self.c.get(f"/automatik/api/result/{rid}").json["status"], "waiting")
+        self.pc("POST", "/automatik/relay/reply", {"id": rid, "box": "cmVwbHk="})
+        self.assertEqual(self.c.get(f"/automatik/api/result/{rid}").json["box"], "cmVwbHk=")
+        # only enrolment: a device message without the token is refused, and so is its result
+        self.assertEqual(self.c.post("/automatik/api/request", json={"msg": {"device": "d", "box": "x"}}).status_code, 401)
+        r2 = self.phone("POST", "/automatik/api/request", {"msg": {"device": "d", "box": "x"}}).json["id"]
+        self.assertEqual(self.c.get(f"/automatik/api/result/{r2}").status_code, 401)
+        # too big, and too many per hour
+        self.assertEqual(self.c.post("/automatik/api/request", json={"msg": {"enroll": {"box": "x" * 20000}}}).status_code, 413)
+        for _ in range(9):
+            self.c.post("/automatik/api/request", json={"msg": msg})
+        self.assertEqual(self.c.post("/automatik/api/request", json={"msg": msg}).status_code, 429)
 
     def test_bad_messages(self):
         self.assertEqual(self.phone("POST", "/automatik/api/request", {"msg": {"hello": 1}}).status_code, 400)

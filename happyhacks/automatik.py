@@ -87,16 +87,40 @@ def _token_ok():
     abort(401)
 
 
+ENROL_MAX_BYTES = 16 * 1024
+ENROL_PER_IP_HOUR = 10
+_enrols: dict[str, list[float]] = {}
+
+
+def _enrol_allowed():
+    """A phone being added doesn't have the token yet (the PC hands it over inside the encrypted reply), so an
+    enrolment message may come without it. It's small, rate-limited per IP, and the PC accepts it only with
+    the single-use code it made itself."""
+    ip, now = _client_ip(), time.time()
+    with _lock:
+        recent = [t for t in _enrols.get(ip, []) if now - t < 3600]
+        if len(recent) >= ENROL_PER_IP_HOUR:
+            abort(429)
+        recent.append(now)
+        _enrols[ip] = recent
+
+
 @bp.post("/api/request")
 def api_request():
-    _token_ok()
     if (request.content_length or 0) > MAX_REQUEST_BYTES:
         abort(413)
     body = request.get_json(silent=True) or {}
     msg = body.get("msg")
-    if not isinstance(msg, dict) or not (("device" in msg and "box" in msg) or "enroll" in msg):
+    enrol = isinstance(msg, dict) and set(msg) == {"enroll"} and isinstance(msg["enroll"], dict)
+    if enrol and not request.headers.get("Authorization"):
+        if (request.content_length or 0) > ENROL_MAX_BYTES:
+            abort(413)
+        _enrol_allowed()
+    else:
+        _token_ok()
+    if not isinstance(msg, dict) or not (("device" in msg and "box" in msg) or enrol):
         abort(400)
-    rid = secrets.token_urlsafe(12)
+    rid = ("e" if enrol else "r") + secrets.token_urlsafe(16)
     with _db() as c:
         _cleanup(c)
         c.execute("INSERT INTO req (id, created, msg, taken) VALUES (?, ?, ?, NULL)", (rid, time.time(), json.dumps(msg)))
@@ -105,7 +129,8 @@ def api_request():
 
 @bp.get("/api/result/<rid>")
 def api_result(rid):
-    _token_ok()
+    if not (rid.startswith("e") and not request.headers.get("Authorization")):
+        _token_ok()   # an enrolment's reply (id starting "e", unguessable) is collected without the token
     with _db() as c:
         row = c.execute("SELECT body FROM res WHERE id = ?", (rid,)).fetchone()
         if row:

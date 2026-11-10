@@ -2,7 +2,7 @@
 // the PC with WebCrypto (ECDH P-256 -> HKDF-SHA256 -> AES-256-GCM). The relay (this site) only
 // stores ciphertext. Devices are added only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.09-1";
+const VERSION = "2026.11.09-2";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -54,7 +54,9 @@ async function unseal(key, text) {
 
 // ---------- relay calls ----------
 async function relay(path, opts, token) {
-  const r = await fetch(API + path, { ...opts, headers: { "Content-Type": "application/json", Authorization: "Bearer " + token } });
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = "Bearer " + token;   // a phone being added has no token yet
+  const r = await fetch(API + path, { ...opts, headers });
   if (r.status === 401) throw new Error("The token was refused.");
   if (r.status === 429) throw new Error("Too many wrong tokens; wait 15 minutes.");
   if (r.status === 413) throw new Error("That's too big to send.");
@@ -123,7 +125,8 @@ async function enrol(e) {
   const out = await postAndWait({ enroll: { box_public: b64(boxPublic), box: await seal(key, data) } }, tok, key, (s) => say("PC status: " + s + "…"));
   if (out.type !== "enrolled") throw new Error("The PC didn't accept this phone.");
   await kvSet("boxPrivate", pair.privateKey);
-  await kvSet("token", tok);
+  if (!out.token && !tok) throw new Error("The PC didn't send a token; type the token you set on the PC.");
+  await kvSet("token", out.token || tok);
   await kvSet("device", { id: out.device, credential: cred.id, pcPublic: b64(pcPublic), name: out.name });
   history.replaceState(null, "", "/automatik/");
   await load();

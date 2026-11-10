@@ -2,7 +2,7 @@
 // downloaded in the background and used only after the user taps "Install update" (it waits until
 // then). API calls (/automatik/api/...) are never cached. Bump CACHE with every app release.
 "use strict";
-const CACHE = "automatik-2026.11.09-1";
+const CACHE = "automatik-2026.11.09-2";
 
 async function fillCache() {
   const c = await caches.open(CACHE);
