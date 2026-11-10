@@ -32,6 +32,8 @@ def create_app() -> Flask:
     from .account_web import bp as account_bp
     app.register_blueprint(admin_bp)
     app.register_blueprint(account_bp)
+    from .automatik import bp as automatik_bp
+    app.register_blueprint(automatik_bp)
 
     @app.context_processor
     def inject_globals():

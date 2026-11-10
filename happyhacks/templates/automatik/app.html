@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Automatik">
+<meta name="theme-color" content="#101418">
+<title>Automatik</title>
+<link rel="manifest" href="/automatik/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="stylesheet" href="{{ asset('automatik/app.css') }}">
+<script src="{{ asset('automatik/app.js') }}" defer></script>
+</head>
+<body>
+<header class="bar">
+  <span class="title">Automatik</span>
+  <span id="pc" class="pc" title="Is the PC connected?">…</span>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
+    <button role="tab" data-tab="dash">Dashboard</button>
+    <button role="tab" data-tab="alerts">Alerts <span id="alertdot" class="dot" hidden></span></button>
+  </nav>
+</header>
+
+<main>
+  <section id="setup" class="panel" hidden>
+    <h1>Add this phone</h1>
+    <div id="setup-none">
+      <p>This phone isn't set up yet. Devices can only be added from the PC:</p>
+      <ol>
+        <li>On the PC (or in your Claude session), run <code>python -m remote enroll</code>.</li>
+        <li>Open the link it shows on this phone, in Safari.</li>
+        <li>Add to Home Screen, then open Automatik from the Home Screen.</li>
+      </ol>
+    </div>
+    <form id="setup-form" hidden>
+      <p>Enrolment code found. Give this phone a name, type your Automatik token, then create a passkey (Face ID).</p>
+      <label>Device name <input id="dev-name" autocomplete="off" maxlength="40" value="iPhone"></label>
+      <label>Token <input id="dev-token" type="password" autocomplete="off" required minlength="20"></label>
+      <button type="submit" class="primary">Create passkey and add this phone</button>
+      <p id="setup-msg" class="muted"></p>
+    </form>
+  </section>
+
+  <section id="chat" class="panel" hidden>
+    <div id="chips" class="chips"></div>
+    <div id="log" class="log" aria-live="polite"></div>
+    <form id="composer" class="composer">
+      <div id="files" class="files"></div>
+      <div class="row">
+        <button type="button" id="attach" class="icon" aria-label="Attach files">＋</button>
+        <input type="file" id="file-input" multiple hidden accept="image/*,audio/*,text/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx">
+        <button type="button" id="mic" class="icon" aria-label="Record a voice note">🎙</button>
+        <textarea id="text" rows="1" placeholder="Ask or tell Automatik…" aria-label="Message"></textarea>
+        <button type="submit" id="send" class="primary" aria-label="Send">➤</button>
+      </div>
+      <div class="row small">
+        <label class="toggle"><input type="checkbox" id="send-now"> Send emails at once (no Approve step)</label>
+        <button type="button" id="new-chat" class="link">New chat</button>
+      </div>
+    </form>
+  </section>
+
+  <section id="dash" class="panel" hidden>
+    <button id="dash-refresh" class="primary">Refresh (Face ID)</button>
+    <div id="dash-body" class="muted">Tap Refresh to load the PC's status.</div>
+  </section>
+
+  <section id="alerts" class="panel" hidden>
+    <div id="alerts-body" class="muted">No alerts.</div>
+  </section>
+
+  <div id="update" class="update" hidden>
+    <span>An update to the app is ready (<span id="update-ver"></span>).</span>
+    <button id="update-apply" class="primary">Install update</button>
+  </div>
+</main>
+</body>
+</html>

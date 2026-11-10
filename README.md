@@ -75,3 +75,11 @@ Each registered app gets a file in `happyhacks/themes/`: `<client id>.json` (nam
 names, `light` and optional `dark` colours) and its mark as an SVG (colours as `var(--t-ink)`, `var(--t-accent)`,
 `var(--t-card)` so it follows light/dark). See `zipzip.json`. A theme is used only for an app registered in `.env`
 (`HH_CLIENTS`), never from anything in a link, so another site can't make the sign-in page look like someone else's.
+
+## Automatik phone link (/automatik/)
+
+A chat app (PWA) for the owner's Automatik PC, plus a **blind relay**: requests from the phone are encrypted to the PC
+and signed with the phone's passkey, so this site only stores ciphertext for a few minutes. The PC collects them by
+polling `/automatik/relay/*` with `AUTOMATIK_RELAY_KEY`. There is no route here that adds or removes devices: that is
+done only on the PC (`python -m remote enroll`). Settings: the `AUTOMATIK_*` lines in `.env.example`; code:
+`happyhacks/automatik.py`, `happyhacks/templates/automatik/`, `static/automatik/`; tests `tests/test_automatik.py`.
