@@ -115,6 +115,11 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line
 /* Patty (assistant) feed */
 .patty-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .patty-head #patty-budget { flex: 1; font-size: 13px; }
+.patty-ask { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 10px; }
+.patty-ask textarea { flex: 1; }
+#patty-wait { font-size: 13px; margin-bottom: 8px; }
+.post.mine { background: var(--bg); margin-left: 24px; }
+.post.reply { margin-top: -4px; }
 .post { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
 .post.unread { border-color: var(--accent); }
 .post.urgent { border-color: var(--warn); }

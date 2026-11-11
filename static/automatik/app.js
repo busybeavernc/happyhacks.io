@@ -4,7 +4,7 @@
 // Sending email always needs Face ID. The relay (this site) only stores ciphertext. Devices are added
 // only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.10-9";
+const VERSION = "2026.11.11-1";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -537,7 +537,7 @@ async function loadAlerts(show) {
   } catch (e) {}
 }
 // ---------- Patty (assistant) ----------
-const KIND_LABEL = { info: "For you", suggestion: "Suggestion", draft: "Draft idea", question: "Question", budget: "Budget", report: "Day report" };
+const KIND_LABEL = { info: "For you", suggestion: "Suggestion", draft: "Draft idea", question: "Question", budget: "Budget", report: "Day report", reply: "Patty", message: "You" };
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function money(v) { return "$" + Number(v || 0).toFixed(2); }
 async function loadPatty() {
@@ -552,15 +552,56 @@ async function loadPatty() {
     body.innerHTML = "";
     const posts = d.posts || [];
     if (!posts.length) body.append(el("p", "muted", "Nothing from Patty yet. She posts here as she learns your routine."));
-    for (const p of posts) body.append(postCard(p));
+    // A message and Patty's reply read as one thread: the reply right under the message it answers.
+    const replies = {};
+    for (const p of posts) if (p.kind === "reply" && p.reply_to) replies[p.reply_to] = p;
+    for (const p of posts) {
+      if (p.kind === "reply" && p.reply_to && posts.some((m) => m.id === p.reply_to)) continue;
+      body.append(postCard(p));
+      if (replies[p.id]) body.append(postCard(replies[p.id]));
+    }
+    return posts;
     const unseen = posts.filter((p) => !p.seen).map((p) => p.id);
     if (unseen.length) call("patty_seen", { ids: unseen }).catch(() => {});
     $("pattydot").hidden = true;
     try { localStorage.setItem("pattySeen", String(Date.now() / 1000)); } catch (e) {}
   } catch (e) { body.textContent = e.message; }
 }
+// Ask Patty directly: the PC wakes her at once; she usually answers within a minute or two. Poll a few minutes.
+async function askPatty(ev) {
+  ev.preventDefault();
+  const t = $("patty-text"), wait = $("patty-wait"), btn = $("patty-send");
+  const text = t.value.trim();
+  if (!text) return;
+  btn.disabled = true; wait.hidden = false; wait.textContent = "Sending…";
+  try {
+    const r = await call("patty_message", { text });
+    if (r.error) throw new Error(r.error);
+    t.value = "";
+    const id = r.message && r.message.id;
+    wait.textContent = "Sent. Patty is looking at it; her answer appears here (usually within a couple of minutes).";
+    await loadPatty();
+    for (let i = 0; i < 20 && id; i++) {
+      await new Promise((ok) => setTimeout(ok, 15000));
+      if ($("patty").hidden) break;
+      const posts = await loadPatty();
+      if (posts && posts.some((p) => p.reply_to === id)) { wait.hidden = true; break; }
+    }
+    if (!wait.hidden) wait.textContent = "Patty hasn't answered yet. She will reply here; tap Refresh later.";
+  } catch (e) { wait.textContent = e.message; }
+  finally { btn.disabled = false; }
+}
 function postCard(p) {
-  const c = el("div", "post" + (p.seen ? "" : " unread") + (p.urgent ? " urgent" : ""));
+  if (p.kind === "message") {
+    const m = el("div", "post mine");
+    const meta = el("div", "meta");
+    meta.append(el("span", "kind", p.from === "supervisor" ? "Via Supervisor" : "You"),
+                el("span", null, new Date(p.ts).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })));
+    if (!p.answered) meta.append(el("span", null, "waiting for Patty"));
+    m.append(meta, el("div", "text", p.text || ""));
+    return m;
+  }
+  const c = el("div", "post" + (p.kind === "reply" ? " reply" : "") + (p.seen ? "" : " unread") + (p.urgent ? " urgent" : ""));
   const meta = el("div", "meta");
   meta.append(el("span", "kind", KIND_LABEL[p.kind] || p.kind),
               el("span", null, new Date(p.ts).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })));
@@ -708,6 +749,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (want) history.replaceState(null, "", location.pathname);
     if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", (ev) => { if (ev.data && ev.data.tab) show(ev.data.tab); });
     $("patty-refresh").onclick = loadPatty;
+    $("patty-ask").onsubmit = askPatty;
     $("notify-on").onclick = notifyOn; $("notify-off").onclick = notifyOff;
     $("recents").onclick = (ev) => { ev.stopPropagation(); openRecents(); };
     $("sheet-close").onclick = closeRecents;
