@@ -560,11 +560,11 @@ async function loadPatty() {
       body.append(postCard(p));
       if (replies[p.id]) body.append(postCard(replies[p.id]));
     }
-    return posts;
     const unseen = posts.filter((p) => !p.seen).map((p) => p.id);
     if (unseen.length) call("patty_seen", { ids: unseen }).catch(() => {});
     $("pattydot").hidden = true;
     try { localStorage.setItem("pattySeen", String(Date.now() / 1000)); } catch (e) {}
+    return posts;
   } catch (e) { body.textContent = e.message; }
 }
 // Ask Patty directly: the PC wakes her at once; she usually answers within a minute or two. Poll a few minutes.
