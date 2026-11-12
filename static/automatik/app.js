@@ -4,7 +4,7 @@
 // Sending email always needs Face ID. The relay (this site) only stores ciphertext. Devices are added
 // only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.11-1";
+const VERSION = "2026.11.11-2";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -540,32 +540,57 @@ async function loadAlerts(show) {
 const KIND_LABEL = { info: "For you", suggestion: "Suggestion", draft: "Draft idea", question: "Question", budget: "Budget", report: "Day report", reply: "Patty", message: "You" };
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function money(v) { return "$" + Number(v || 0).toFixed(2); }
+// Refreshes update the list in place: a post already shown keeps its card (and whatever you're typing in it);
+// only new or changed posts get a new card. A card you've typed in is never replaced until you send or clear it.
+const pattyCards = new Map();          // post id -> { sig, node }
+function postSig(p) { const { seen, feedback, ...rest } = p; return JSON.stringify(rest); }
+function isTyping(node) {
+  return !!node && (node.dataset.dirty === "1" || node.contains(document.activeElement));
+}
 async function loadPatty() {
-  const body = $("patty-body"); body.textContent = "Loading…";
+  const body = $("patty-body");
+  const first = !pattyCards.size;
+  if (first) body.textContent = "Loading…";
   try {
     const d = await call("patty", {});
-    if (d.error) { body.textContent = d.error; return; }
+    if (d.error) { if (first) body.textContent = d.error; return; }
     const b = d.budget || {};
     $("patty-budget").textContent = b.patty_weekly_cap_usd != null
       ? "This week " + money(b.spent_week_usd) + " of " + money(b.patty_weekly_cap_usd) + " (" + Math.round(b.week_used_pct || 0) + "%) · today " + money(b.spent_today_usd) + " · " + d.prepared + " answers ready"
       : "";
-    body.innerHTML = "";
     const posts = d.posts || [];
-    if (!posts.length) body.append(el("p", "muted", "Nothing from Patty yet. She posts here as she learns your routine."));
     // A message and Patty's reply read as one thread: the reply right under the message it answers.
-    const replies = {};
+    const replies = {}, order = [];
     for (const p of posts) if (p.kind === "reply" && p.reply_to) replies[p.reply_to] = p;
     for (const p of posts) {
       if (p.kind === "reply" && p.reply_to && posts.some((m) => m.id === p.reply_to)) continue;
-      body.append(postCard(p));
-      if (replies[p.id]) body.append(postCard(replies[p.id]));
+      order.push(p);
+      if (replies[p.id]) order.push(replies[p.id]);
     }
+    const nodes = order.map((p) => {
+      const have = pattyCards.get(p.id), sig = postSig(p);
+      if (have && (have.sig === sig || isTyping(have.node))) {
+        have.node.classList.toggle("unread", !p.seen && p.kind !== "message");
+        return have.node;
+      }
+      const node = postCard(p);
+      pattyCards.set(p.id, { sig, node });
+      return node;
+    });
+    const keep = new Set(order.map((p) => p.id));
+    for (const id of [...pattyCards.keys()]) if (!keep.has(id)) pattyCards.delete(id);
+    if (!posts.length) nodes.push(el("p", "muted", "Nothing from Patty yet. She posts here as she learns your routine."));
+    // Put the nodes in order, touching the page only where something moved or is new.
+    if (body.firstChild && body.firstChild.nodeType === 3) body.textContent = "";
+    nodes.forEach((n, i) => { if (body.children[i] !== n) body.insertBefore(n, body.children[i] || null); });
+    while (body.children.length > nodes.length) body.lastElementChild.remove();
+    for (const t of [...body.childNodes]) if (t.nodeType === 3) t.remove();
     const unseen = posts.filter((p) => !p.seen).map((p) => p.id);
     if (unseen.length) call("patty_seen", { ids: unseen }).catch(() => {});
     $("pattydot").hidden = true;
     try { localStorage.setItem("pattySeen", String(Date.now() / 1000)); } catch (e) {}
     return posts;
-  } catch (e) { body.textContent = e.message; }
+  } catch (e) { if (first) body.textContent = e.message; }
 }
 // Ask Patty directly: the PC wakes her at once; she usually answers within a minute or two. Poll a few minutes.
 async function askPatty(ev) {
@@ -629,6 +654,7 @@ function postCard(p) {
   const note = el("textarea"); note.rows = 2; note.maxLength = 1000;
   note.placeholder = p.kind === "question" ? "Your answer…" : "Tell Patty (optional)…";
   note.value = fb.text || "";
+  note.oninput = () => { c.dataset.dirty = note.value.trim() !== (fb.text || "").trim() ? "1" : ""; };
   const up = el("button", "icon" + (fb.rating === "up" ? " on" : ""), "👍"); up.type = "button"; up.setAttribute("aria-label", "Helpful");
   const down = el("button", "icon" + (fb.rating === "down" ? " on" : ""), "👎"); down.type = "button"; down.setAttribute("aria-label", "Not needed right now");
   const send = el("button", "link", p.kind === "question" ? "Send answer" : "Send note"); send.type = "button";
@@ -642,6 +668,7 @@ function postCard(p) {
       if (res.error) throw new Error(res.error);
       up.classList.toggle("on", rating === "up"); down.classList.toggle("on", rating === "down");
       given.textContent = "Thanks, Patty got it.";
+      delete c.dataset.dirty;
     } catch (e) { given.textContent = e.message; }
   }
   up.onclick = () => save("up"); down.onclick = () => save("down"); send.onclick = () => save(undefined);
