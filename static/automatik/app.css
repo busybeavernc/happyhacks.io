@@ -115,6 +115,28 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line
 /* Patty (assistant) feed */
 .patty-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
 .patty-head #patty-budget { flex: 1; font-size: 13px; }
+.act-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.seg { display: flex; flex: 1; gap: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.seg button { flex: 1; border: 0; background: none; color: var(--muted); padding: 6px; border-radius: 8px; font: inherit; }
+.seg button[aria-selected="true"] { background: var(--bg); color: var(--ink); font-weight: 600; }
+.dot.run { background: var(--ok); }
+.act { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+.act.running { border-color: var(--ok); }
+.act.stopped { border-color: var(--warn); }
+.act .meta { font-size: 12px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
+.act .who { font-weight: 600; color: var(--ink); }
+.act .st { text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.act.running .st { color: var(--ok); } .act.stopped .st { color: var(--warn); }
+.act h3 { margin: 4px 0; font-size: 15px; font-weight: 500; overflow-wrap: anywhere; }
+.act .now { font-size: 13px; color: var(--ok); overflow-wrap: anywhere; }
+.act .res { font-size: 13px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 4px; }
+.act ol { margin: 8px 0 0; padding-left: 0; list-style: none; font-size: 13px; }
+.act li { padding: 3px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.act li time { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: 6px; }
+.act li .ag { color: var(--accent); margin-right: 4px; }
+#act-log-name { width: 100%; margin-bottom: 8px; padding: 6px; font: inherit; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+.logline { font-size: 12px; padding: 4px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.logline time { color: var(--muted); margin-right: 6px; }
 .patty-ask { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 10px; }
 .patty-ask textarea { flex: 1; }
 #patty-wait { font-size: 13px; margin-bottom: 8px; }

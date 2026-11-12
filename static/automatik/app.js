@@ -4,7 +4,7 @@
 // Sending email always needs Face ID. The relay (this site) only stores ciphertext. Devices are added
 // only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.11-2";
+const VERSION = "2026.11.12-1";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -616,6 +616,92 @@ async function askPatty(ev) {
   } catch (e) { wait.textContent = e.message; }
   finally { btn.disabled = false; }
 }
+// ---------- Activity: what the Supervisor, Patty and the builder work on (read from the PC's session records) ----------
+const WHO = { supervisor: "Supervisor", patty: "Patty", builder: "Builder" };
+const hhmm = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+const dur = (s) => s < 60 ? s + " s" : Math.floor(s / 60) + " min " + String(s % 60).padStart(2, "0") + " s";
+let actTimer = null, actOpen = {};
+async function loadActivity() {
+  const box = $("act-list");
+  if (!box.children.length) box.textContent = "Loading…";
+  try {
+    const d = await call("activity", { days: 2 });
+    if (d.error) { box.textContent = d.error; return; }
+    const es = d.entries || [];
+    box.innerHTML = "";
+    if (!es.length) box.append(el("p", "muted", "Nothing in the last two days."));
+    let lastDay = "";
+    for (const e of es) {
+      const day = new Date(e.start * 1000).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+      if (e.status !== "running" && day !== lastDay) { box.append(el("h4", "muted", day)); lastDay = day; }
+      box.append(actCard(e));
+    }
+    const running = es.some((e) => e.status === "running");
+    $("actdot").hidden = !running;
+    clearTimeout(actTimer);
+    if (!$("activity").hidden && !$("act-list").hidden) actTimer = setTimeout(loadActivity, running ? 8000 : 30000);
+  } catch (e) { box.textContent = e.message; }
+}
+function actCard(e) {
+  const c = el("div", "act " + e.status);
+  const meta = el("div", "meta");
+  meta.append(el("span", "st", e.status === "running" ? "working now" : e.status === "stopped" ? "cut off" : "done"),
+              el("span", "who", WHO[e.who] || e.who), el("span", null, "from " + e.source),
+              el("span", null, hhmm(e.start)), el("span", null, dur(e.duration_s)),
+              el("span", null, "$" + Number(e.cost_usd || 0).toFixed(2)), el("span", null, e.steps_n + " steps"));
+  c.append(meta, el("h3", null, e.title));
+  if (e.current) c.append(el("div", "now", "Now: " + e.current));
+  if (e.result && e.status === "done") c.append(el("div", "res", e.result));
+  const more = el("button", "link", actOpen[e.id] ? "Hide steps" : "Show steps"); more.type = "button";
+  const list = el("ol"); list.hidden = !actOpen[e.id];
+  async function fill() {
+    list.textContent = "Loading…";
+    try {
+      const d = await call("activity_detail", { id: e.id });
+      if (d.error) throw new Error(d.error);
+      list.innerHTML = "";
+      const steps = d.entry.steps || [];
+      if (!steps.length) list.append(el("li", null, "No tool steps: it answered from what it knew."));
+      for (const s of steps) {
+        const li = el("li"); li.append(el("time", null, new Date(s.t * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })));
+        if (s.agent) li.append(el("span", "ag", s.agent));
+        li.append(document.createTextNode(s.text)); list.append(li);
+      }
+      if (d.entry.result && e.status === "done") list.append(el("li", null, "Answer: " + d.entry.result));
+    } catch (err) { list.textContent = err.message; }
+  }
+  more.onclick = () => { actOpen[e.id] = !actOpen[e.id]; list.hidden = !actOpen[e.id];
+    more.textContent = actOpen[e.id] ? "Hide steps" : "Show steps"; if (actOpen[e.id]) fill(); };
+  if (actOpen[e.id]) fill();
+  c.append(more, list);
+  return c;
+}
+async function loadLogs() {
+  const sel = $("act-log-name"), out = $("act-log-lines");
+  out.textContent = "Loading…";
+  try {
+    const d = await call("logs", { name: sel.value || "authkeeper", lines: 200 });
+    if (d.error) throw new Error(d.error);
+    if (!sel.options.length) {
+      for (const l of d.logs || []) { const o = el("option", null, l.title); o.value = l.name; sel.append(o); }
+      sel.value = d.name || "authkeeper";
+    }
+    out.innerHTML = "";
+    if (!(d.lines || []).length) out.append(el("p", "muted", "Nothing in this log yet."));
+    for (const l of d.lines || []) {
+      const row = el("div", "logline");
+      row.append(el("time", null, (l.ts || "").replace("T", " ").slice(5, 19)), document.createTextNode(l.text));
+      out.append(row);
+    }
+  } catch (e) { out.textContent = e.message; }
+}
+function actMode(logs) {
+  $("act-list").hidden = logs; $("act-logs").hidden = !logs;
+  $("act-show-list").setAttribute("aria-selected", String(!logs)); $("act-show-logs").setAttribute("aria-selected", String(logs));
+  clearTimeout(actTimer);
+  (logs ? loadLogs : loadActivity)();
+}
+
 function postCard(p) {
   if (p.kind === "message") {
     const m = el("div", "post mine");
@@ -737,11 +823,12 @@ async function pcStatus() {
 
 // ---------- tabs, updates, start ----------
 function show(tab) {
-  for (const id of ["setup", "chat", "patty", "dash", "alerts"]) $(id).hidden = id !== tab;
+  for (const id of ["setup", "chat", "patty", "activity", "dash", "alerts"]) $(id).hidden = id !== tab;
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   if (tab === "alerts") loadAlerts(true);
   if (tab === "patty" && !$("patty-body").dataset.loaded) { $("patty-body").dataset.loaded = "1"; loadPatty(); }
   if (tab === "dash") renderNotify().catch(() => {});
+  if (tab === "activity") actMode(!$("act-logs").hidden); else clearTimeout(actTimer);
 }
 async function watchUpdates() {
   if (!("serviceWorker" in navigator)) return;
@@ -772,10 +859,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       try { await unlock(); } catch (e) { if (e.name !== "NotAllowedError") alert(e.message); }
     };
     const want = (location.hash.match(/^#tab=(\w+)/) || [])[1];
-    show(["patty", "dash", "alerts"].includes(want) ? want : "chat"); renderQuickMenu(); restoreHistory();
+    show(["patty", "activity", "dash", "alerts"].includes(want) ? want : "chat"); renderQuickMenu(); restoreHistory();
     if (want) history.replaceState(null, "", location.pathname);
     if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", (ev) => { if (ev.data && ev.data.tab) show(ev.data.tab); });
     $("patty-refresh").onclick = loadPatty;
+    $("act-refresh").onclick = () => actMode(!$("act-logs").hidden);
+    $("act-show-list").onclick = () => actMode(false); $("act-show-logs").onclick = () => actMode(true);
+    $("act-log-name").onchange = loadLogs;
     $("patty-ask").onsubmit = askPatty;
     $("notify-on").onclick = notifyOn; $("notify-off").onclick = notifyOff;
     $("recents").onclick = (ev) => { ev.stopPropagation(); openRecents(); };

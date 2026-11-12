@@ -25,6 +25,7 @@
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
     <button role="tab" data-tab="patty">Patty <span id="pattydot" class="dot" hidden></span></button>
+    <button role="tab" data-tab="activity">Activity <span id="actdot" class="dot run" hidden></span></button>
     <button role="tab" data-tab="dash">Dashboard</button>
     <button role="tab" data-tab="alerts">Alerts <span id="alertdot" class="dot" hidden></span></button>
   </nav>
@@ -85,6 +86,21 @@
     </form>
     <div id="patty-wait" class="muted" hidden></div>
     <div id="patty-body" class="muted">Patty, your assistant, posts what she notices, suggestions, draft ideas and questions here. Tap Refresh to load.</div>
+  </section>
+
+  <section id="activity" class="panel" hidden>
+    <div class="row act-head">
+      <div class="seg" role="tablist">
+        <button type="button" id="act-show-list" aria-selected="true">Activity</button>
+        <button type="button" id="act-show-logs" aria-selected="false">Logs</button>
+      </div>
+      <button id="act-refresh" class="primary" type="button">Refresh</button>
+    </div>
+    <div id="act-list" class="muted">What the Supervisor, Patty and the builder are working on and did lately.</div>
+    <div id="act-logs" hidden>
+      <select id="act-log-name" aria-label="Which log"></select>
+      <div id="act-log-lines" class="muted"></div>
+    </div>
   </section>
 
   <section id="dash" class="panel" hidden>
