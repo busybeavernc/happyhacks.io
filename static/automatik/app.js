@@ -4,7 +4,7 @@
 // Sending email always needs Face ID. The relay (this site) only stores ciphertext. Devices are added
 // only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.19-2";
+const VERSION = "2026.11.19-3";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -644,25 +644,18 @@ function pattyOrder(posts) {
   }
   return out;
 }
-// Auto-refresh (user, 2026-11-19): every 8 s while the Patty tab is open and the app is on screen, and at once when a
-// notification from Patty arrives. Only with an open session (never asks for Face ID), only what changed (delta),
-// cards already shown keep their node (a reply being typed stays), and it doesn't keep the session open ("auto").
-let pattyTimer = null, pattyAuto = false, pattyAutoBusy = false;
-const PATTY_EVERY_MS = 8000;
-const pattyOnScreen = () => !!pattyFeed && !$("patty").hidden && document.visibilityState === "visible";
-function pattyTick() {
-  clearTimeout(pattyTimer); pattyTimer = null;
-  if (pattyOnScreen()) pattyTimer = setTimeout(pattyAutoRefresh, PATTY_EVERY_MS);
-}
+// Auto-refresh (user, 2026-11-19; no periodic polling, build b_cd21a6): the Patty tab refreshes once when the app is
+// opened or comes back on screen, and at once when a notification from Patty arrives. Only with an open session
+// (never asks for Face ID), only what changed (delta), cards already shown keep their node (a reply being typed
+// stays), and it doesn't keep the session open ("auto"). The Refresh button stays.
+let pattyAuto = false, pattyAutoBusy = false;
 async function pattyAutoRefresh() {
-  clearTimeout(pattyTimer); pattyTimer = null;
   if (!pattyFeed || $("patty").hidden) return;
   if (!pattyAutoBusy && sessionLive() && !pattyFeed.q) {
     pattyAutoBusy = true;
     pattyAuto = true; const pr = pattyFeed.refresh(); pattyAuto = false;   // pattyPage reads the flag synchronously
-    try { await pr; } finally { pattyAutoBusy = false; }
+    try { await pr; } catch (e) {} finally { pattyAutoBusy = false; }
   }
-  pattyTick();
 }
 async function pattyPage(p) {
   const auto = pattyAuto;
@@ -931,7 +924,7 @@ function show(tab) {
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   // Lazy tabs: a tab's list is fetched only when it's opened (from the cache first, then only what changed).
   if (tab === "alerts") alertFeed.open();
-  if (tab === "patty") pattyFeed.open().finally(pattyTick); else { clearTimeout(pattyTimer); pattyTimer = null; }
+  if (tab === "patty") pattyFeed.open();
   if (tab === "dash") { renderNotify().catch(() => {}); dashFeed.open(); $("dashdot").hidden = true; }
   if (tab === "activity") actMode(!$("act-logs").hidden, true); else clearTimeout(actTimer);
 }
@@ -994,10 +987,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (ev.data && ev.data.tab) show(ev.data.tab);
       if (ev.data && ev.data.pushed) onPushed(ev.data.pushed);
     });
-    // Back on screen (app switched back, phone unlocked, back/forward cache): the Patty tab refreshes at once.
-    const onBack = () => { if (document.visibilityState === "visible") pattyAutoRefresh(); else { clearTimeout(pattyTimer); pattyTimer = null; } };
-    document.addEventListener("visibilitychange", onBack);
-    window.addEventListener("pageshow", onBack);
+    // Back on screen (app switched back, phone unlocked, back/forward cache): the Patty tab refreshes once. (A fresh
+    // start already fetched it in show(); pageshow counts only for a page restored from the back/forward cache.)
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") pattyAutoRefresh(); });
+    window.addEventListener("pageshow", (ev) => { if (ev.persisted) pattyAutoRefresh(); });
     $("patty-refresh").onclick = () => pattyFeed.refresh();
     $("act-refresh").onclick = () => $("act-logs").hidden ? actFeed.refresh().then(actTick) : loadLogs();
     $("act-show-list").onclick = () => actMode(false); $("act-show-logs").onclick = () => actMode(true);
