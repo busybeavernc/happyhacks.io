@@ -2,7 +2,7 @@
 // downloaded in the background and used only after the user taps "Install update" (it waits until
 // then). API calls (/automatik/api/...) are never cached. Bump CACHE with every app release.
 "use strict";
-const CACHE = "automatik-2026.11.19-1";
+const CACHE = "automatik-2026.11.19-2";
 
 async function fillCache() {
   const c = await caches.open(CACHE);
@@ -35,10 +35,15 @@ self.addEventListener("fetch", (e) => {
 self.addEventListener("push", (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) {}
-  const title = d.title || "Automatik";
-  e.waitUntil(self.registration.showNotification(title, {
-    body: d.body || "Something new for you.", tag: d.tag || "automatik", icon: "/static/icon-192.png",
-    data: { tab: title === "Patty" ? "patty" : "alerts" } }));
+  const title = d.title || "Automatik", tab = title === "Patty" ? "patty" : "alerts";
+  e.waitUntil(Promise.all([
+    self.registration.showNotification(title, {
+      body: d.body || "Something new for you.", tag: d.tag || "automatik", icon: "/static/icon-192.png", data: { tab } }),
+    // open app windows refresh that tab now (or show its badge), so a tap shows it already updated
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) if (c.url.includes("/automatik")) c.postMessage({ pushed: tab });
+    }),
+  ]));
 });
 self.addEventListener("notificationclick", (e) => {
   e.notification.close();

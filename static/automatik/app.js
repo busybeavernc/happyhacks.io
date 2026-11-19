@@ -4,7 +4,7 @@
 // Sending email always needs Face ID. The relay (this site) only stores ciphertext. Devices are added
 // only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.19-1";
+const VERSION = "2026.11.19-2";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -644,8 +644,34 @@ function pattyOrder(posts) {
   }
   return out;
 }
+// Auto-refresh (user, 2026-11-19): every 8 s while the Patty tab is open and the app is on screen, and at once when a
+// notification from Patty arrives. Only with an open session (never asks for Face ID), only what changed (delta),
+// cards already shown keep their node (a reply being typed stays), and it doesn't keep the session open ("auto").
+let pattyTimer = null, pattyAuto = false, pattyAutoBusy = false;
+const PATTY_EVERY_MS = 8000;
+const pattyOnScreen = () => !!pattyFeed && !$("patty").hidden && document.visibilityState === "visible";
+function pattyTick() {
+  clearTimeout(pattyTimer); pattyTimer = null;
+  if (pattyOnScreen()) pattyTimer = setTimeout(pattyAutoRefresh, PATTY_EVERY_MS);
+}
+async function pattyAutoRefresh() {
+  clearTimeout(pattyTimer); pattyTimer = null;
+  if (!pattyFeed || $("patty").hidden) return;
+  if (!pattyAutoBusy && sessionLive() && !pattyFeed.q) {
+    pattyAutoBusy = true;
+    pattyAuto = true; const pr = pattyFeed.refresh(); pattyAuto = false;   // pattyPage reads the flag synchronously
+    try { await pr; } finally { pattyAutoBusy = false; }
+  }
+  pattyTick();
+}
 async function pattyPage(p) {
-  const d = await call("patty", { page: p });
+  const auto = pattyAuto;
+  let d;
+  if (auto) {
+    d = await quietCall("patty", { page: p, auto: true });
+    if (!d) throw new Error("");                  // the session ended meanwhile: keep what's shown, no Face ID
+  } else d = await call("patty", { page: p });
+  pattyFeed.lastAuto = auto;
   if (d.error) throw new Error(d.error);
   const b = d.budget;
   if (b) $("patty-budget").textContent = b.patty_weekly_cap_usd != null
@@ -662,7 +688,10 @@ function pattyRendered(f) {
   for (const id of unseen) { const p = f.items.get(String(id)); p.seen = true; if (p.kind !== "message") p._done = true; }
   for (const p of f.items.values()) if (p.kind === "reply" && p.reply_to && f.items.has(p.reply_to)) {
     const m = f.items.get(p.reply_to); m.answered = m.answered || p.id; m._done = true; }
-  if (unseen.length) { call("patty_seen", { ids: unseen }).catch(() => {}); f.save(); }
+  if (unseen.length) {
+    (f.lastAuto ? quietCall("patty_seen", { ids: unseen, auto: true }) : call("patty_seen", { ids: unseen })).catch(() => {});
+    f.save();
+  }
   $("pattydot").hidden = true;
   try { localStorage.setItem("pattySeen", String(Date.now() / 1000)); } catch (e) {}
 }
@@ -902,9 +931,16 @@ function show(tab) {
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
   // Lazy tabs: a tab's list is fetched only when it's opened (from the cache first, then only what changed).
   if (tab === "alerts") alertFeed.open();
-  if (tab === "patty") pattyFeed.open();
+  if (tab === "patty") pattyFeed.open().finally(pattyTick); else { clearTimeout(pattyTimer); pattyTimer = null; }
   if (tab === "dash") { renderNotify().catch(() => {}); dashFeed.open(); $("dashdot").hidden = true; }
   if (tab === "activity") actMode(!$("act-logs").hidden, true); else clearTimeout(actTimer);
+}
+// A notification just arrived (the service worker tells every open window): the open tab updates now, a closed
+// tab gets its badge. Patty's list is fetched even while the app is in the background, so a tap shows it updated.
+function onPushed(tab) {
+  if (!pattyFeed) return;
+  if (tab === "patty") { if (!$("patty").hidden) pattyAutoRefresh(); else $("pattydot").hidden = false; }
+  else if (tab === "alerts") { if (!$("alerts").hidden) alertFeed.refresh(); else $("alertdot").hidden = false; }
 }
 function makeFeeds() {
   pattyFeed = new Feed({ tab: "patty", root: $("patty-body"), noun: "Patty's posts", needsSession: true, fetch: pattyPage,
@@ -954,7 +990,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     const want = (location.hash.match(/^#tab=(\w+)/) || [])[1];
     show(["patty", "activity", "dash", "alerts"].includes(want) ? want : "chat"); renderQuickMenu(); restoreHistory();
     if (want) history.replaceState(null, "", location.pathname);
-    if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", (ev) => { if (ev.data && ev.data.tab) show(ev.data.tab); });
+    if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", (ev) => {
+      if (ev.data && ev.data.tab) show(ev.data.tab);
+      if (ev.data && ev.data.pushed) onPushed(ev.data.pushed);
+    });
+    // Back on screen (app switched back, phone unlocked, back/forward cache): the Patty tab refreshes at once.
+    const onBack = () => { if (document.visibilityState === "visible") pattyAutoRefresh(); else { clearTimeout(pattyTimer); pattyTimer = null; } };
+    document.addEventListener("visibilitychange", onBack);
+    window.addEventListener("pageshow", onBack);
     $("patty-refresh").onclick = () => pattyFeed.refresh();
     $("act-refresh").onclick = () => $("act-logs").hidden ? actFeed.refresh().then(actTick) : loadLogs();
     $("act-show-list").onclick = () => actMode(false); $("act-show-logs").onclick = () => actMode(true);
