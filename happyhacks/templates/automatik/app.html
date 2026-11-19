@@ -11,6 +11,7 @@
 <link rel="manifest" href="/automatik/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 <link rel="stylesheet" href="{{ asset('automatik/app.css') }}">
+<script src="{{ asset('automatik/feed.js') }}" defer></script>
 <script src="{{ asset('automatik/app.js') }}" defer></script>
 </head>
 <body>
@@ -26,7 +27,7 @@
     <button role="tab" data-tab="chat" aria-selected="true">Chat</button>
     <button role="tab" data-tab="patty">Patty <span id="pattydot" class="dot" hidden></span></button>
     <button role="tab" data-tab="activity">Activity <span id="actdot" class="dot run" hidden></span></button>
-    <button role="tab" data-tab="dash">Dashboard</button>
+    <button role="tab" data-tab="dash">Dashboard <span id="dashdot" class="dot" hidden></span></button>
     <button role="tab" data-tab="alerts">Alerts <span id="alertdot" class="dot" hidden></span></button>
   </nav>
   <button type="button" id="recents" class="icon" aria-label="Recent requests" aria-haspopup="dialog" aria-expanded="false" title="Recent requests" hidden>🕘</button>
@@ -58,6 +59,7 @@
   </section>
 
   <section id="chat" class="panel" hidden>
+    <div id="chat-pins" class="chat-pins" hidden></div>
     <div id="log" class="log" aria-live="polite"></div>
     <form id="composer" class="composer">
       <div id="files" class="files"></div>
@@ -85,7 +87,7 @@
       <button id="patty-send" class="primary" type="submit">Send</button>
     </form>
     <div id="patty-wait" class="muted" hidden></div>
-    <div id="patty-body" class="muted">Patty, your assistant, posts what she notices, suggestions, draft ideas and questions here. Tap Refresh to load.</div>
+    <div id="patty-body"></div>
   </section>
 
   <section id="activity" class="panel" hidden>
@@ -96,7 +98,7 @@
       </div>
       <button id="act-refresh" class="primary" type="button">Refresh</button>
     </div>
-    <div id="act-list" class="muted">What the Supervisor, Patty and the builder are working on and did lately.</div>
+    <div id="act-list"></div>
     <div id="act-logs" hidden>
       <select id="act-log-name" aria-label="Which log"></select>
       <div id="act-log-lines" class="muted"></div>
@@ -110,12 +112,14 @@
       <div class="actions"><button id="notify-on" class="primary">Turn on notifications</button>
         <button id="notify-off" class="link" hidden>Turn off</button></div>
     </div>
-        <button id="dash-refresh" class="primary">Refresh</button>
-    <div id="dash-body" class="muted">Tap Refresh to load the PC's status.</div>
+    <div class="row dash-head"><div id="dash-stats"></div><button id="dash-refresh" class="primary">Refresh</button></div>
+    <div id="dash-speed"></div>
+    <div id="dash-body"></div>
   </section>
 
   <section id="alerts" class="panel" hidden>
-    <div id="alerts-body" class="muted">No alerts.</div>
+    <div class="row act-head"><span class="muted">Alerts from the PC</span><button id="alerts-refresh" class="primary" type="button">Refresh</button></div>
+    <div id="alerts-body"></div>
   </section>
 
   <div id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>

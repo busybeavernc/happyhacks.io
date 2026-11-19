@@ -84,6 +84,35 @@ class RelayTests(unittest.TestCase):
         a = self.phone("GET", "/automatik/api/alerts").json["alerts"]
         self.assertEqual((a[0]["level"], a[0]["text"]), ("urgent", "A new device was enrolled."))
 
+    def test_alert_pages_counts_search_archive(self):
+        from happyhacks import automatik
+        now = time.time()
+        with self.app.app_context(), automatik._db() as c:
+            for i in range(30):      # one every 12 hours: 15 within 7 days, 15 older
+                c.execute("INSERT INTO alert (created, level, text) VALUES (?, ?, ?)",
+                          (now - 3600 - i * 43200, "urgent" if i in (2, 20) else "normal", f"Automatik alert {i}"))
+        get = lambda q: self.phone("GET", "/automatik/api/alerts?" + q).json
+        pg = get("page=1&limit=5")
+        self.assertEqual([a["text"] for a in pg["items"]], [f"Automatik alert {i}" for i in (0, 1, 3, 4, 5)])
+        self.assertEqual({a["text"] for a in pg["pinned"]}, {"Automatik alert 2", "Automatik alert 20"})   # urgent, unseen
+        self.assertTrue(pg["more"])
+        self.assertEqual(pg["hidden_archived"], 15)      # 16 older, one of them pinned
+        older = get(f"page=1&limit=5&before={pg['items'][-1]['created']}")
+        self.assertEqual(older["items"][0]["text"], "Automatik alert 6")
+        seen = get(f"page=1&seen_before={now}")
+        self.assertEqual(seen["pinned"], [])
+        self.assertTrue(all(a["_done"] for a in seen["items"]))
+        self.assertEqual(len(get("page=1&archived=1&limit=100")["items"]), 28)
+        self.assertEqual(get("page=1&q=alert+25")["total"], 1)
+        delta = get(f"page=1&since={pg['now']}")
+        self.assertEqual((delta["delta"], delta["items"], delta["pinned"]), (True, [], []))
+        self.assertEqual(len(delta["pin_ids"]), 2)
+        self.pc("POST", "/automatik/relay/alert", {"level": "normal", "text": "Patty has something for you."})
+        self.assertEqual(len(get(f"page=1&since={pg['now']}")["items"]), 1)
+        cnt = get(f"count=1&since={pg['now']}")
+        self.assertEqual((cnt["count"], cnt["patty"], cnt["urgent"]), (1, 1, 0))
+        self.assertNotIn("items", cnt)
+
     def test_enrolment_without_token(self):
         msg = {"enroll": {"box_public": "a2V5", "box": "Ym94"}}
         rid = self.c.post("/automatik/api/request", json={"msg": msg}).json["id"]

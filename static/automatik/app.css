@@ -156,3 +156,38 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line
 .post .fb textarea { flex-basis: 100%; }
 .post .given { font-size: 13px; color: var(--muted); margin-top: 6px; white-space: pre-wrap; }
 .notify { margin-bottom: 12px; }
+
+/* Tab lists (2026-11-19): search + toggles, pinned "Needs you", day groups, collapsed long items */
+.feedbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 8px; }
+.feedbar input[type="search"] { flex: 1 1 100%; padding: 6px 10px; }
+.chip { border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 13px; }
+.chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.feedstatus { font-size: 13px; margin-bottom: 6px; }
+.feedstatus[hidden] { display: none; }
+.pins { margin-bottom: 4px; }
+.pinhead { margin: 4px 0 6px; font-size: 13px; color: var(--warn); text-transform: uppercase; letter-spacing: .04em; }
+details.day { margin-bottom: 6px; }
+details.day > summary { font-size: 13px; color: var(--muted); font-weight: 600; padding: 6px 0; cursor: pointer; list-style-position: inside; }
+.feedfoot { font-size: 12px; margin: 6px 0 12px; }
+.older { display: block; margin: 8px auto; }
+.older[hidden] { display: none; }
+.more-toggle { font-size: 13px; margin-top: 4px; }
+.collapsed .text, .collapsed .res, .collapsed .now, .collapsed h3 {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.collapsed .draft, .collapsed .fb, .collapsed .given, .collapsed ol, .collapsed > button.link:not(.more-toggle) { display: none; }
+.collapsed { cursor: pointer; }
+.row1 { display: flex; gap: 8px; font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.row1 time { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.row1 .what { font-weight: 600; flex: none; }
+.row1 .res { color: var(--muted); overflow-wrap: anywhere; }
+.row1.bad .res, .row1.bad .what { color: var(--warn); }
+.alert time { color: var(--muted); font-size: 13px; }
+.dash-head { align-items: center; justify-content: space-between; }
+.speed { margin: 8px 0; font-size: 13px; }
+.chat-pins { position: sticky; top: 0; z-index: 2; background: var(--card); border: 1px solid var(--accent); border-radius: 10px; padding: 6px 10px; margin-bottom: 6px; font-size: 14px; }
+.chat-pins[hidden] { display: none; }
+.chat-top { display: flex; gap: 14px; justify-content: center; font-size: 13px; }
+.chat-day > summary { text-align: center; }
+.chat-day-body { display: flex; flex-direction: column; gap: 10px; padding-top: 6px; }
+
+.msg.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; cursor: pointer; }

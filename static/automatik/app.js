@@ -4,7 +4,7 @@
 // Sending email always needs Face ID. The relay (this site) only stores ciphertext. Devices are added
 // only with a code made on the PC; there is no other way.
 "use strict";
-const VERSION = "2026.11.12-1";
+const VERSION = "2026.11.19-1";
 const RP_ID = "happyhacks.io";
 const API = "/automatik/api";
 const enc = new TextEncoder(), dec = new TextDecoder();
@@ -63,7 +63,9 @@ async function relay(path, opts, token) {
   if (r.status === 429) throw new Error("Too many wrong tokens; wait 15 minutes.");
   if (r.status === 413) throw new Error("That's too big to send.");
   if (!r.ok && r.status !== 404) throw new Error("The relay answered " + r.status + ".");
-  return r.json();
+  const text = await r.text(), out = JSON.parse(text || "{}");
+  if (out && typeof out === "object") Object.defineProperty(out, "_bytes", { value: text.length });   // App speed
+  return out;
 }
 async function postAndWait(msg, token, key, onStatus) {
   const { id } = await relay("/request", { method: "POST", body: JSON.stringify({ msg }) }, token);
@@ -77,7 +79,9 @@ async function postAndWait(msg, token, key, onStatus) {
                               r.error === "session_expired" ? "The session ended; unlock with Face ID." : r.error);
         err.code = r.error; throw err;
       }
-      return unseal(key, r.box);
+      const out = await unseal(key, r.box);
+      if (out && typeof out === "object") Object.defineProperty(out, "_bytes", { value: r._bytes });
+      return out;
     }
     if (r.status === "gone") throw new Error("The request expired before the PC answered.");
     onStatus && onStatus(r.status);
@@ -194,6 +198,7 @@ async function unlock(onStatus) {
 }
 async function lockNow() {
   const s = session; await dropSession();
+  cacheClear().catch(() => {});        // Lock = signed out: the cached tab lists go too
   if (s && s.priv) { try { await sendSigned("end_session", {}, s); } catch (e) {} }   // the PC forgets it too
 }
 async function call(type, body, onStatus, onFaceId) {
@@ -202,15 +207,23 @@ async function call(type, body, onStatus, onFaceId) {
     if (!sessionLive()) { onFaceId && onFaceId(); await unlock(onStatus); }
     try {
       const r = await sendSigned(type, body, session, onStatus);
-      if (session) { session.last = Date.now(); kvSet("session", session).catch(() => {}); }
+      // badges are polled in the background: they don't keep a session open (the PC doesn't count them either)
+      if (session && type !== "badges") { session.last = Date.now(); kvSet("session", session).catch(() => {}); }
       renderLock();
       return r;
     } catch (e) {
+      if (e.code === "refused") cacheClear().catch(() => {});     // e.g. this device was revoked on the PC
       if (e.code === "session_expired" && attempt === 0) { await dropSession(); continue; }   // e.g. the PC restarted
       if (e.code === "passkey_needed") { onFaceId && onFaceId(); return sendSigned(type, body, null, onStatus); }
       throw e;
     }
   }
+}
+// A background request (tab badges): only with an open session, never asks for Face ID.
+async function quietCall(type, body) {
+  if (!sessionLive()) return null;
+  try { return await sendSigned(type, body, session); }
+  catch (e) { if (e.code === "session_expired") await dropSession(); return null; }
 }
 function renderLock() {
   const b = $("lock"); if (!b) return;
@@ -319,15 +332,57 @@ function addMsg(who, text, extra) {
 function saveHistory(who, text, ms, err) {
   try {
     const h = JSON.parse(localStorage.getItem("h_" + conversation) || "[]");
-    h.push(ms != null ? [who, text, ms, !!err] : [who, text]); localStorage.setItem("h_" + conversation, JSON.stringify(h.slice(-100)));
+    h.push([who, text, ms == null ? null : ms, !!err, Date.now()]); localStorage.setItem("h_" + conversation, JSON.stringify(h.slice(-100)));
   } catch (e) {}
 }
+// The chat shows its newest 20 messages (Show older for more), grouped by day (older days folded), messages
+// older than 7 days only with Show archived, and long earlier answers as 2 lines until tapped. Kept on this
+// phone only (the Supervisor's own records are on the PC: ask it, or use 🕘 to search your requests).
+let chatShown = 20, chatArchived = false;
 function restoreHistory() {
-  $("log").innerHTML = "";
-  try { for (const [who, text, ms, err] of JSON.parse(localStorage.getItem("h_" + conversation) || "[]")) {
-    const d = document.createElement("div"); d.className = "msg " + who + (err ? " err" : ""); d.textContent = text;
+  const log = $("log");
+  const keepCards = [...pendingDrafts].filter((c) => c.isConnected);    // pending Approve cards stay
+  log.innerHTML = "";
+  let h = [];
+  try { h = JSON.parse(localStorage.getItem("h_" + conversation) || "[]"); } catch (e) {}
+  const now = Date.now(), cut = now - FEED_ARCHIVE_DAYS * 86400000;
+  const archived = h.filter((m) => m[4] && m[4] < cut).length;
+  if (!chatArchived) h = h.filter((m) => !m[4] || m[4] >= cut);
+  const older = Math.max(0, h.length - chatShown);
+  const top = el("div", "chat-top");
+  if (older) { const b = el("button", "link", "Show older (" + older + ")"); b.type = "button"; b.onclick = () => { chatShown += 20; restoreHistory(); }; top.append(b); }
+  if (archived || chatArchived) { const b = el("button", "link", chatArchived ? "Hide archived" : "Show archived (" + archived + ")"); b.type = "button";
+    b.onclick = () => { chatArchived = !chatArchived; restoreHistory(); }; top.append(b); }
+  if (top.children.length) log.append(top);
+  let box = log, last = null;
+  for (const [who, text, ms, err, ts] of h.slice(older)) {
+    const g = ts ? dayGroup(ts / 1000, now) : "Earlier";
+    if (g !== last) {
+      last = g;
+      const d = el("details", "day chat-day"); d.open = g === "Today" || g === "Yesterday";
+      const inner = el("div", "chat-day-body"); d.append(el("summary", null, g), inner); log.append(d); box = inner;   // Safari: no flex on <details>
+    }
+    const d = el("div", "msg " + who + (err ? " err" : ""), text);
+    if (who === "ai" && (text || "").length > 280) {
+      d.classList.add("clamp"); d.title = "Tap to show all";
+      d.onclick = () => d.classList.toggle("clamp");
+    }
     if (ms != null) d.append(durLabel(ms, err));
-    $("log").append(d); } } catch (e) {}
+    box.append(d);
+  }
+  for (const c of keepCards) log.append(c);
+  renderChatPins();
+}
+// Approve cards waiting for a tap: a bar on top of the chat says so and jumps to them (never hidden).
+const pendingDrafts = new Set();
+function renderChatPins() {
+  const bar = $("chat-pins"); if (!bar) return;
+  const live = [...pendingDrafts].filter((c) => c.isConnected);
+  bar.hidden = !live.length; bar.textContent = "";
+  if (!live.length) return;
+  const b = el("button", "link", "✉ " + live.length + (live.length === 1 ? " email waits" : " emails wait") + " for your Approve ↓"); b.type = "button";
+  b.onclick = () => live[0].scrollIntoView({ block: "center", behavior: "smooth" });
+  bar.append(b);
 }
 function draftCard(d) {
   const c = document.createElement("div"); c.className = "card";
@@ -343,15 +398,18 @@ function draftCard(d) {
   ok.onclick = async () => {
     ok.disabled = no.disabled = true; done.textContent = "Sending…";
     try { const r = await call("approve", { tool: d.tool, draft: d.draft, code: d.code });
-          done.textContent = r.sent ? "Sent ✓" : "Not sent: " + (r.error || "unknown"); if (!r.sent) ok.disabled = no.disabled = false; }
+          done.textContent = r.sent ? "Sent ✓" : "Not sent: " + (r.error || "unknown"); if (!r.sent) ok.disabled = no.disabled = false;
+          if (r.sent) { pendingDrafts.delete(c); renderChatPins(); } }
     catch (e) { done.textContent = e.message; ok.disabled = no.disabled = false; }
   };
   no.onclick = async () => { ok.disabled = no.disabled = true; done.textContent = "Cancelled; the draft stays in Drafts.";
+    pendingDrafts.delete(c); renderChatPins();
     try { await call("cancel", { tool: d.tool, draft: d.draft }); } catch (e) {} };
   act.append(ok, no); c.append(h, dl, act, done);
   const note = document.createElement("div"); note.className = "muted"; note.style.fontSize = "13px";
   note.textContent = "Check the full text in the reply above before approving."; c.append(note);
   $("log").append(c); c.scrollIntoView({ block: "end" });
+  pendingDrafts.add(c); renderChatPins();
 }
 async function readFiles() {
   const out = [];
@@ -379,9 +437,19 @@ function replyText(reply) {
   return lines.join("\n");
 }
 function openRecents() {
-  const body = $("sheet-body"); body.innerHTML = "";
-  const list = readRecents();
-  if (!list.length) { body.textContent = "No requests yet."; }
+  const sheet = $("sheet-body"); sheet.innerHTML = "";
+  const q = el("input"); q.type = "search"; q.placeholder = "Search your requests and replies…"; q.setAttribute("aria-label", "Search requests");
+  const body = el("div");
+  q.oninput = () => fillRecents(body, q.value.trim().toLowerCase());
+  sheet.append(q, body);
+  fillRecents(body, "");
+  $("sheet").hidden = false; $("recents").setAttribute("aria-expanded", "true");
+}
+function fillRecents(body, q) {
+  body.innerHTML = "";
+  let list = readRecents();
+  if (q) list = list.filter((r) => ((r.text || "") + "\n" + replyText(r.reply)).toLowerCase().includes(q));
+  if (!list.length) { body.textContent = q ? "Nothing found." : "No requests yet."; }
   for (const r of list) {
     const row = document.createElement("div"); row.className = "recent";
     const head = document.createElement("button"); head.type = "button";
@@ -406,7 +474,6 @@ function openRecents() {
                            acts.hidden = !open; };
     row.append(head, acts, view); body.append(row);
   }
-  $("sheet").hidden = false; $("recents").setAttribute("aria-expanded", "true");
 }
 function closeRecents() { $("sheet").hidden = true; $("recents").setAttribute("aria-expanded", "false"); }
 function resend(r) {
@@ -493,105 +560,113 @@ async function toggleMic() {
 }
 
 // ---------- dashboard and alerts ----------
-async function loadDash() {
-  const body = $("dash-body"); body.textContent = "Loading…";
-  try {
-    const d = await call("dashboard", {});
-    body.innerHTML = "";
-    const stats = document.createElement("div");
-    for (const [k, v] of [["Paused", d.paused ? "yes" : "no"], ["Emails sent today", d.sends_today], ["Devices", (d.devices || []).length]]) {
-      const s = document.createElement("span"); s.className = "stat"; const b = document.createElement("b"); b.textContent = v; s.append(b, k); stats.append(s);
-    }
-    body.append(stats);
-    const t = document.createElement("table");
-    t.innerHTML = "<thead><tr><th>Time</th><th>Request</th><th>Result</th></tr></thead>";
-    const tb = document.createElement("tbody");
-    for (const r of d.requests || []) {
-      const tr = document.createElement("tr");
-      for (const v of [String(r.ts || "").replace("T", " ").slice(5, 16), (r.type || "") + " " + (r.action || ""), (r.result || "") + (r.summary ? " · " + r.summary : "")]) {
-        const td = document.createElement("td"); td.textContent = v; tr.append(td);
-      }
-      tb.append(tr);
-    }
-    t.append(tb); body.append(t);
-  } catch (e) { body.textContent = e.message; }
+// The Dashboard: the PC's status on top, then its request log as a list (refused / errors pinned until seen).
+let dashFeed = null, alertFeed = null, pattyFeed = null, actFeed = null;
+function dashStats(d) {
+  const body = $("dash-stats"); body.textContent = "";
+  for (const [k, v] of [["Paused", d.paused ? "yes" : "no"], ["Emails sent today", d.sends_today], ["Devices", (d.devices || []).length]]) {
+    const s = el("span", "stat"); s.append(el("b", null, String(v)), k); body.append(s);
+  }
+  renderSpeed();
 }
-async function loadAlerts(show) {
+function reqRow(r) {
+  const c = el("div", "row1 req" + (r.result === "refused" || r.result === "error" ? " bad" : ""));
+  c.append(el("time", null, String(r.ts || "").replace("T", " ").slice(5, 16)),
+           el("span", "what", (r.type || "") + " " + (r.action || "")),
+           el("span", "res text", (r.result || "") + (r.summary ? " · " + r.summary : "")));
+  return c;
+}
+// App speed (measured on this phone): first render from the cache, and the PC's answer (full or only changes).
+function renderSpeed() {
+  const box = $("dash-speed"); if (!box) return;
+  let p = {}; try { p = JSON.parse(localStorage.getItem("perf") || "{}"); } catch (e) {}
+  box.textContent = "";
+  const names = { patty: "Patty", activity: "Activity", dash: "Dashboard", alerts: "Alerts" };
+  const kb = (b) => b == null ? "" : " (" + (b / 1024).toFixed(1) + " KB)";
+  const rows = Object.keys(names).filter((t) => p[t]).map((t) => {
+    const r = p[t], bits = [];
+    if (r.cache_ms != null) bits.push("cache " + r.cache_ms + " ms");
+    if (r.first_ms != null) bits.push("first load " + (r.first_ms / 1000).toFixed(1) + " s" + kb(r.first_bytes));
+    if (r.delta_ms != null) bits.push("update " + (r.delta_ms / 1000).toFixed(1) + " s" + kb(r.delta_bytes));
+    return names[t] + ": " + bits.join(" · ");
+  });
+  if (!rows.length) return;
+  const d = el("details", "speed"); d.append(el("summary", "muted", "App speed on this phone"));
+  for (const r of rows) d.append(el("div", "muted", r));
+  box.append(d);
+}
+function alertRow(a) {
+  const d = el("div", "alert " + a.level);
+  d.append(el("time", null, new Date(a.created * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" }) + " · "),
+           el("span", "text", a.text));
+  return d;
+}
+async function alertsPage(p) {
+  const qs = new URLSearchParams({ page: "1" });
+  for (const [k, v] of Object.entries(p)) if (v != null && v !== false) qs.set(k, v === true ? "1" : String(v));
+  const pg = await relay("/alerts?" + qs.toString(), { method: "GET" }, token);
+  for (const a of [...(pg.items || []), ...(pg.pinned || [])]) a.id = String(a.id);
+  if (pg.now && !p.q && !p.before) { try { localStorage.setItem("alertsSeen", String(pg.now)); } catch (e) {} $("alertdot").hidden = true; }
+  return pg;
+}
+// Badges for the tabs that aren't open: a count from the relay (alerts, no texts) and, while a session is
+// open, a small request to the PC (Patty unread, Activity running, Dashboard problems). Never asks for Face ID.
+async function loadBadges() {
   if (!token) return;
   try {
-    const { alerts } = await relay("/alerts", { method: "GET" }, token);
-    const seen = Number(localStorage.getItem("alertsSeen") || 0);
-    $("alertdot").hidden = !alerts.some((a) => a.created > seen);
-    const pattySeen = Number(localStorage.getItem("pattySeen") || 0);
-    $("pattydot").hidden = !alerts.some((a) => a.created > pattySeen && /^Patty/.test(a.text));
-    if (show) {
-      const box = $("alerts-body"); box.innerHTML = "";
-      if (!alerts.length) box.textContent = "No alerts.";
-      for (const a of alerts) {
-        const d = document.createElement("div"); d.className = "alert " + a.level;
-        d.textContent = new Date(a.created * 1000).toLocaleString() + " · " + a.text; box.append(d);
-      }
-      if (alerts[0]) localStorage.setItem("alertsSeen", String(alerts[0].created));
-      $("alertdot").hidden = true;
-    }
+    const seen = Number(localStorage.getItem("alertsSeen") || 0), pattySeen = Number(localStorage.getItem("pattySeen") || 0);
+    const a = await relay("/alerts?count=1&since=" + seen, { method: "GET" }, token);
+    if ($("alerts").hidden && a.count != null) $("alertdot").hidden = !(a.count > 0);
+    const ap = await relay("/alerts?count=1&since=" + pattySeen, { method: "GET" }, token);
+    if ($("patty").hidden && ap.patty > 0) $("pattydot").hidden = false;
   } catch (e) {}
+  const b = await quietCall("badges", { seen: { dash: Number(localStorage.getItem("seen_dash") || 0) } });
+  if (!b || b.type !== "badges") return;
+  if ($("patty").hidden && b.patty_unread > 0) $("pattydot").hidden = false;
+  if (b.activity_running != null) $("actdot").hidden = !(b.activity_running > 0);
+  if ($("dash").hidden) $("dashdot").hidden = !(b.dash_pinned > 0);
 }
 // ---------- Patty (assistant) ----------
 const KIND_LABEL = { info: "For you", suggestion: "Suggestion", draft: "Draft idea", question: "Question", budget: "Budget", report: "Day report", reply: "Patty", message: "You" };
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function money(v) { return "$" + Number(v || 0).toFixed(2); }
-// Refreshes update the list in place: a post already shown keeps its card (and whatever you're typing in it);
-// only new or changed posts get a new card. A card you've typed in is never replaced until you send or clear it.
-const pattyCards = new Map();          // post id -> { sig, node }
-function postSig(p) { const { seen, feedback, ...rest } = p; return JSON.stringify(rest); }
-function isTyping(node) {
-  return !!node && (node.dataset.dirty === "1" || node.contains(document.activeElement));
+// A card already shown keeps its node (and whatever you're typing in it); only new or changed posts get a new one.
+function postSig(p) { const { seen, feedback, _t, _gt, _pin, _done, ...rest } = p; return JSON.stringify(rest); }
+// A message and Patty's reply read as one thread: the reply right under the message it answers (same day group).
+function pattyOrder(posts) {
+  const byId = new Map(posts.map((p) => [p.id, p])), replies = {}, out = [];
+  for (const p of posts) if (p.kind === "reply" && p.reply_to && byId.has(p.reply_to)) replies[p.reply_to] = p;
+  for (const p of posts) {
+    if (p.kind === "reply" && p.reply_to && byId.has(p.reply_to)) continue;
+    out.push(p);
+    const r = replies[p.id];
+    if (r) { r._gt = p._t; out.push(r); }
+  }
+  return out;
 }
-async function loadPatty() {
-  const body = $("patty-body");
-  const first = !pattyCards.size;
-  if (first) body.textContent = "Loading…";
-  try {
-    const d = await call("patty", {});
-    if (d.error) { if (first) body.textContent = d.error; return; }
-    const b = d.budget || {};
-    $("patty-budget").textContent = b.patty_weekly_cap_usd != null
-      ? "This week " + money(b.spent_week_usd) + " of " + money(b.patty_weekly_cap_usd) + " (" + Math.round(b.week_used_pct || 0) + "%) · today " + money(b.spent_today_usd) + " · " + d.prepared + " answers ready"
-      : "";
-    const posts = d.posts || [];
-    // A message and Patty's reply read as one thread: the reply right under the message it answers.
-    const replies = {}, order = [];
-    for (const p of posts) if (p.kind === "reply" && p.reply_to) replies[p.reply_to] = p;
-    for (const p of posts) {
-      if (p.kind === "reply" && p.reply_to && posts.some((m) => m.id === p.reply_to)) continue;
-      order.push(p);
-      if (replies[p.id]) order.push(replies[p.id]);
-    }
-    const nodes = order.map((p) => {
-      const have = pattyCards.get(p.id), sig = postSig(p);
-      if (have && (have.sig === sig || isTyping(have.node))) {
-        have.node.classList.toggle("unread", !p.seen && p.kind !== "message");
-        return have.node;
-      }
-      const node = postCard(p);
-      pattyCards.set(p.id, { sig, node });
-      return node;
-    });
-    const keep = new Set(order.map((p) => p.id));
-    for (const id of [...pattyCards.keys()]) if (!keep.has(id)) pattyCards.delete(id);
-    if (!posts.length) nodes.push(el("p", "muted", "Nothing from Patty yet. She posts here as she learns your routine."));
-    // Put the nodes in order, touching the page only where something moved or is new.
-    if (body.firstChild && body.firstChild.nodeType === 3) body.textContent = "";
-    nodes.forEach((n, i) => { if (body.children[i] !== n) body.insertBefore(n, body.children[i] || null); });
-    while (body.children.length > nodes.length) body.lastElementChild.remove();
-    for (const t of [...body.childNodes]) if (t.nodeType === 3) t.remove();
-    const unseen = posts.filter((p) => !p.seen).map((p) => p.id);
-    if (unseen.length) call("patty_seen", { ids: unseen }).catch(() => {});
-    $("pattydot").hidden = true;
-    try { localStorage.setItem("pattySeen", String(Date.now() / 1000)); } catch (e) {}
-    return posts;
-  } catch (e) { if (first) body.textContent = e.message; }
+async function pattyPage(p) {
+  const d = await call("patty", { page: p });
+  if (d.error) throw new Error(d.error);
+  const b = d.budget;
+  if (b) $("patty-budget").textContent = b.patty_weekly_cap_usd != null
+    ? "This week " + money(b.spent_week_usd) + " of " + money(b.patty_weekly_cap_usd) + " (" + Math.round(b.week_used_pct || 0) + "%) · today " + money(b.spent_today_usd) + " · " + d.prepared + " answers ready"
+    : "";
+  const pg = d.page || { items: [] };
+  Object.defineProperty(pg, "_bytes", { value: d._bytes });
+  return pg;
 }
+function pattyRendered(f) {
+  // Posts shown now are marked read on the PC (for the badge); they stay on screen until the next visit.
+  const unseen = [...f.items.values()].filter((p) => !p.seen && f.nodes.has(String(p.id))).map((p) => p.id);
+  // (also in the cache: read = handled, so they fold away next visit; a message is handled once Patty answered)
+  for (const id of unseen) { const p = f.items.get(String(id)); p.seen = true; if (p.kind !== "message") p._done = true; }
+  for (const p of f.items.values()) if (p.kind === "reply" && p.reply_to && f.items.has(p.reply_to)) {
+    const m = f.items.get(p.reply_to); m.answered = m.answered || p.id; m._done = true; }
+  if (unseen.length) { call("patty_seen", { ids: unseen }).catch(() => {}); f.save(); }
+  $("pattydot").hidden = true;
+  try { localStorage.setItem("pattySeen", String(Date.now() / 1000)); } catch (e) {}
+}
+function loadPatty() { return pattyFeed.refresh(); }
 // Ask Patty directly: the PC wakes her at once; she usually answers within a minute or two. Poll a few minutes.
 async function askPatty(ev) {
   ev.preventDefault();
@@ -609,8 +684,8 @@ async function askPatty(ev) {
     for (let i = 0; i < 20 && id; i++) {
       await new Promise((ok) => setTimeout(ok, 15000));
       if ($("patty").hidden) break;
-      const posts = await loadPatty();
-      if (posts && posts.some((p) => p.reply_to === id)) { wait.hidden = true; break; }
+      await loadPatty();
+      if ([...pattyFeed.items.values()].some((p) => p.reply_to === id)) { wait.hidden = true; break; }
     }
     if (!wait.hidden) wait.textContent = "Patty hasn't answered yet. She will reply here; tap Refresh later.";
   } catch (e) { wait.textContent = e.message; }
@@ -621,26 +696,23 @@ const WHO = { supervisor: "Supervisor", patty: "Patty", builder: "Builder" };
 const hhmm = (t) => new Date(t * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 const dur = (s) => s < 60 ? s + " s" : Math.floor(s / 60) + " min " + String(s % 60).padStart(2, "0") + " s";
 let actTimer = null, actOpen = {};
+async function activityPage(p) {
+  const d = await call("activity", { page: p });
+  if (d.error) throw new Error(d.error);
+  const pg = d.page || { items: [] };
+  Object.defineProperty(pg, "_bytes", { value: d._bytes });
+  return pg;
+}
 async function loadActivity() {
-  const box = $("act-list");
-  if (!box.children.length) box.textContent = "Loading…";
-  try {
-    const d = await call("activity", { days: 2 });
-    if (d.error) { box.textContent = d.error; return; }
-    const es = d.entries || [];
-    box.innerHTML = "";
-    if (!es.length) box.append(el("p", "muted", "Nothing in the last two days."));
-    let lastDay = "";
-    for (const e of es) {
-      const day = new Date(e.start * 1000).toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
-      if (e.status !== "running" && day !== lastDay) { box.append(el("h4", "muted", day)); lastDay = day; }
-      box.append(actCard(e));
-    }
-    const running = es.some((e) => e.status === "running");
-    $("actdot").hidden = !running;
-    clearTimeout(actTimer);
-    if (!$("activity").hidden && !$("act-list").hidden) actTimer = setTimeout(loadActivity, running ? 8000 : 30000);
-  } catch (e) { box.textContent = e.message; }
+  clearTimeout(actTimer);
+  if (sessionLive()) await actFeed.refresh();     // the timer never asks for Face ID; Refresh does
+  actTick();
+}
+function actTick() {      // while the list is open: only what changed, every 8 s while something runs, else 30 s
+  const running = [...actFeed.items.values()].some((e) => e._pin);
+  $("actdot").hidden = !running;
+  clearTimeout(actTimer);
+  if (!$("activity").hidden && !$("act-list").hidden) actTimer = setTimeout(loadActivity, running ? 8000 : 30000);
 }
 function actCard(e) {
   const c = el("div", "act " + e.status);
@@ -695,11 +767,13 @@ async function loadLogs() {
     }
   } catch (e) { out.textContent = e.message; }
 }
-function actMode(logs) {
+function actMode(logs, opening) {
   $("act-list").hidden = logs; $("act-logs").hidden = !logs;
   $("act-show-list").setAttribute("aria-selected", String(!logs)); $("act-show-logs").setAttribute("aria-selected", String(logs));
   clearTimeout(actTimer);
-  (logs ? loadLogs : loadActivity)();
+  if (logs) loadLogs();
+  else if (opening) actFeed.open().then(actTick);
+  else loadActivity();
 }
 
 function postCard(p) {
@@ -824,11 +898,29 @@ async function pcStatus() {
 // ---------- tabs, updates, start ----------
 function show(tab) {
   for (const id of ["setup", "chat", "patty", "activity", "dash", "alerts"]) $(id).hidden = id !== tab;
+  if (!pattyFeed && tab !== "setup") makeFeeds();
   document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === tab)));
-  if (tab === "alerts") loadAlerts(true);
-  if (tab === "patty" && !$("patty-body").dataset.loaded) { $("patty-body").dataset.loaded = "1"; loadPatty(); }
-  if (tab === "dash") renderNotify().catch(() => {});
-  if (tab === "activity") actMode(!$("act-logs").hidden); else clearTimeout(actTimer);
+  // Lazy tabs: a tab's list is fetched only when it's opened (from the cache first, then only what changed).
+  if (tab === "alerts") alertFeed.open();
+  if (tab === "patty") pattyFeed.open();
+  if (tab === "dash") { renderNotify().catch(() => {}); dashFeed.open(); $("dashdot").hidden = true; }
+  if (tab === "activity") actMode(!$("act-logs").hidden, true); else clearTimeout(actTimer);
+}
+function makeFeeds() {
+  pattyFeed = new Feed({ tab: "patty", root: $("patty-body"), noun: "Patty's posts", needsSession: true, fetch: pattyPage,
+    card: postCard, sig: postSig, order: pattyOrder, onRender: pattyRendered,
+    update: (n, p) => n.classList.toggle("unread", !p.seen && p.kind !== "message"),
+    empty: "Nothing from Patty yet. She posts here as she learns your routine." });
+  actFeed = new Feed({ tab: "activity", root: $("act-list"), noun: "activity", needsSession: true, seenRule: true,
+    fetch: activityPage, card: actCard, sig: (e) => JSON.stringify([e.status, e.title, e.current, e.result, e.steps_n, e.cost_usd]),
+    empty: "Nothing in the last 7 days." });
+  dashFeed = new Feed({ tab: "dash", root: $("dash-body"), noun: "requests", needsSession: true, seenRule: true,
+    fetch: async (p) => { const d = await call("dashboard", { page: p }); if (d.error) throw new Error(d.error);
+                          if (d.paused !== undefined) dashStats(d); const pg = d.page || { items: [] };
+                          Object.defineProperty(pg, "_bytes", { value: d._bytes }); return pg; },
+    card: reqRow, empty: "No requests from the phone yet." });
+  alertFeed = new Feed({ tab: "alerts", root: $("alerts-body"), noun: "alerts", seenRule: true, fetch: alertsPage,
+    card: alertRow, empty: "No alerts." });
 }
 async function watchUpdates() {
   if (!("serviceWorker" in navigator)) return;
@@ -858,12 +950,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (sessionLive()) return lockNow();
       try { await unlock(); } catch (e) { if (e.name !== "NotAllowedError") alert(e.message); }
     };
+    makeFeeds();
     const want = (location.hash.match(/^#tab=(\w+)/) || [])[1];
     show(["patty", "activity", "dash", "alerts"].includes(want) ? want : "chat"); renderQuickMenu(); restoreHistory();
     if (want) history.replaceState(null, "", location.pathname);
     if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", (ev) => { if (ev.data && ev.data.tab) show(ev.data.tab); });
-    $("patty-refresh").onclick = loadPatty;
-    $("act-refresh").onclick = () => actMode(!$("act-logs").hidden);
+    $("patty-refresh").onclick = () => pattyFeed.refresh();
+    $("act-refresh").onclick = () => $("act-logs").hidden ? actFeed.refresh().then(actTick) : loadLogs();
     $("act-show-list").onclick = () => actMode(false); $("act-show-logs").onclick = () => actMode(true);
     $("act-log-name").onchange = loadLogs;
     $("patty-ask").onsubmit = askPatty;
@@ -878,9 +971,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     $("file-input").onchange = (ev) => { addFiles(ev.target.files); ev.target.value = ""; };
     $("mic").onclick = toggleMic;
     $("new-chat").onclick = () => { conversation = newConversation(); restoreHistory(); };
-    $("dash-refresh").onclick = loadDash;
-    pcStatus(); loadAlerts(false);
-    setInterval(pcStatus, 30000); setInterval(() => loadAlerts(false), 60000);
+    $("dash-refresh").onclick = () => dashFeed.refresh();
+    $("alerts-refresh").onclick = () => alertFeed.refresh();
+    pcStatus(); loadBadges();
+    setInterval(pcStatus, 30000); setInterval(loadBadges, 60000);
   }
   watchUpdates().catch(() => {});
 });

@@ -33,7 +33,8 @@ bp = Blueprint("automatik", __name__, url_prefix="/automatik")
 
 MAX_REQUEST_BYTES = 180 * 1024 * 1024        # 5 attachments x 25 MB, base64-encoded, plus text
 KEEP_MIN = int(os.environ.get("AUTOMATIK_KEEP_MIN", "30"))
-ALERT_KEEP_DAYS = 7
+ALERT_KEEP_DAYS = 90                         # kept for Show archived and search (texts are content-free)
+ARCHIVE_DAYS = 7                             # older alerts aren't sent unless the app asks for archived ones
 PC_CLOCK_SKEW_S = 300
 FAIL_LIMIT = 10                              # wrong tokens per IP before a 15-minute lockout
 _lock = threading.Lock()
@@ -146,10 +147,58 @@ def api_result(rid):
 def api_alerts():
     _token_ok()
     since = request.args.get("since", type=float) or 0.0
-    with _db() as c:
+    if request.args.get("count"):
+        return jsonify(_alert_counts(since))
+    if request.args.get("page"):
+        return jsonify(_alert_page(request.args))
+    with _db() as c:     # the app before 2026-11-19
         rows = c.execute("SELECT id, created, level, text FROM alert WHERE created > ? ORDER BY id DESC LIMIT 50",
                          (since,)).fetchall()
     return jsonify({"alerts": [dict(r) for r in rows]})
+
+
+def _alert_counts(since):
+    """For the tab badges: how many alerts came after the phone last looked (a few bytes, no texts)."""
+    with _db() as c:
+        r = c.execute("SELECT COUNT(*) n, SUM(level = 'urgent') u, SUM(text LIKE 'Patty%') p FROM alert WHERE created > ?",
+                      (since,)).fetchone()
+    return {"count": r["n"] or 0, "urgent": r["u"] or 0, "patty": r["p"] or 0, "now": time.time()}
+
+
+def _alert_page(args):
+    """Alerts the same way the PC pages the other tabs (remote/feed.py on the PC): newest `limit` (20), `before` = an
+    alert time for older ones, `since` = only newer ones (alerts never change), urgent alerts newer than
+    `seen_before` pinned, older than ARCHIVE_DAYS only with `archived`, `q` = words searched in every alert kept."""
+    def num(k):
+        v = args.get(k, type=float)
+        return v if v and v > 0 else None
+    limit = min(max(args.get("limit", type=int) or 20, 1), 100)
+    before, since, seen = num("before"), num("since"), num("seen_before") or 0.0
+    q = [w for w in (args.get("q") or "").lower().split() if w][:8]
+    now = time.time()
+    with _db() as c:
+        rows = [dict(r) for r in c.execute("SELECT id, created, level, text FROM alert ORDER BY created DESC").fetchall()]
+    for r in rows:
+        r.update(_t=r["created"], _pin=r["level"] == "urgent" and r["created"] > seen, _done=r["created"] <= seen)
+    out = {"now": now, "delta": False, "reset": False, "more": False, "pinned": []}
+    if q:
+        hits = [r for r in rows if all(w in r["text"].lower() for w in q) and (not before or r["_t"] < before)]
+        out.update(items=hits[:limit], more=len(hits) > limit, total=len(hits), search=" ".join(q))
+        return out
+    cut = now - ARCHIVE_DAYS * 86400
+    window = rows if args.get("archived") else [r for r in rows if r["_t"] >= cut or r["_pin"]]
+    out.update(total=len(window), hidden_archived=len(rows) - len(window))
+    pins = [r for r in window if r["_pin"]][:50] if before is None else []
+    out["pinned"] = pins
+    if since and before is None:
+        new = [r for r in window if not r["_pin"] and r["_t"] > since]
+        if len(new) <= limit:
+            out.update(items=new, delta=True, pinned=[r for r in pins if r["_t"] > since], pin_ids=[r["id"] for r in pins])
+            return out
+        out["reset"] = True
+    rest = [r for r in window if not r["_pin"] and (before is None or r["_t"] < before)]
+    out.update(items=rest[:limit], more=len(rest) > limit)
+    return out
 
 
 @bp.get("/api/status")
