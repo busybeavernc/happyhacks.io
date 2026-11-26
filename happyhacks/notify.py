@@ -150,7 +150,12 @@ def sign_in_message(channel, to, code, link, purpose, name=None, app_name=None, 
     L = _look(theme)
     font = (f"'{theme['font_body']}'," if theme and theme.get('font_body') else 'Nunito,') + '-apple-system,Segoe UI,Roboto,sans-serif'
     head_font = (f"'{theme['font_heading']}'," if theme and theme.get('font_heading') else 'Fredoka,') + '-apple-system,Segoe UI,Roboto,sans-serif'
-    hello = f'Hi {name.split()[0]},\n\n' if name else ''
+    # greet by first name - but not when the "name" is really an email address or number (accounts made before a
+    # name was asked for): "Hi brashertech@gmail.com" to a different address looks like the code went astray
+    first = (name or '').split()[0] if (name or '').strip() else ''
+    if '@' in first or any(c.isdigit() for c in first):
+        first = ''
+    hello = f'Hi {first},\n\n' if first else ''
     credit = f'\n{brand} is a product of {BRAND}.' if theme else ''
     text = (f'{hello}{what}.\n\nYour code: {code}\n\nOr open this link: {link}\n\n'
             f"The code and link expire in 10 minutes. If you didn't ask for this, you can ignore this email.\n\n"
@@ -165,7 +170,7 @@ def sign_in_message(channel, to, code, link, purpose, name=None, app_name=None, 
 <div style="font-family:{font};max-width:460px;margin:0 auto;background:{L['card']};border-radius:14px;overflow:hidden;color:{L['ink']};border:1px solid {L['line']}">
 <div style="background:{L['header']};padding:16px 24px;border-bottom:4px solid {L['stripe']}">{logo}<span style="vertical-align:middle;color:{L['header_ink']};font:700 20px {head_font}">{_h(brand)}</span></div>
 <div style="padding:22px 24px 26px">
-<p style="font-size:15px;margin:0 0 10px">{('Hi ' + _h(name.split()[0]) + ',') if name else ''}</p>
+<p style="font-size:15px;margin:0 0 10px">{('Hi ' + _h(first) + ',') if first else ''}</p>
 <p style="font-size:15px;margin:0">{_h(what)}. Your code:</p>
 <p style="font-size:34px;font-weight:700;letter-spacing:6px;margin:14px 0;color:{L['ink']}">{code}</p>
 <p style="margin:0 0 16px"><a href="{_h(link)}" style="display:inline-block;background:{L['button']};color:{L['button_ink']};text-decoration:none;padding:12px 22px;border-radius:{'10px' if theme else '999px'};font-weight:700">{_h(button)}</a></p>

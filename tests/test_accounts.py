@@ -305,3 +305,12 @@ class AppBranding(Base):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_codes_dont_greet_by_an_email_address(monkeypatch):
+    from happyhacks import notify
+    sent = []
+    monkeypatch.setattr(notify, 'send_email', lambda to, subject, text, html=None, from_name=None: sent.append(text))
+    notify.sign_in_message('email', 'busy@example.com', '123456', 'https://x/account/link?t=1', 'login', 'brash@example.com')
+    notify.sign_in_message('email', 'pat@example.com', '123456', 'https://x/account/link?t=1', 'login', 'Pat Lee')
+    assert not sent[0].startswith('Hi') and sent[1].startswith('Hi Pat,')
