@@ -268,7 +268,8 @@ def relay_alert():
     if level == "urgent" and to:
         try:
             from .notify import send_email
-            send_email(to, "Automatik alert", text + "\n\n(Automatic alert from your Automatik PC via happyhacks.io.)")
+            send_email(to, "Automatik alert", text + "\n\n(Automatic alert from your Automatik PC via happyhacks.io.)",
+                       kind="alerts")
         except Exception:
             pass   # the alert is still in the app
     return jsonify({"ok": True})

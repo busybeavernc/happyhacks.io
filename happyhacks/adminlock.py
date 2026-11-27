@@ -217,7 +217,7 @@ def alert(u, subject, body):
         from . import notify
         for addr in to:
             try:
-                notify.send_email(addr, f'[Happy Hacks] {subject}', body)
+                notify.send_email(addr, f'[Happy Hacks] {subject}', body, kind='alerts')
             except Exception as e:   # noqa: BLE001 - an alert must never break anything
                 log.error('admin alert to %s failed: %s', addr, e)
     threading.Thread(target=go, daemon=True).start()

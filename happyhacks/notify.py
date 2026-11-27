@@ -1,7 +1,10 @@
 """Sending sign-in codes: email over SMTP, text messages through Telnyx (same settings as zipzip).
 
   AUTH_DELIVERY=send (default) | log     log: don't send, write the message to the app log (setup and testing)
-  SMTP_HOST, SMTP_PORT (465 = SSL, 587 = STARTTLS), SMTP_USER, SMTP_PASSWORD, MAIL_FROM
+  SMTP_HOST, SMTP_PORT (465 = SSL, 587 = STARTTLS), SMTP_USER, SMTP_PASSWORD
+  Who emails come from (the address must be allowed by the SMTP service, e.g. the whole domain verified in SMTP2GO):
+    MAIL_FROM_ACCOUNTS  sign-in codes and links          (default accounts@happyhacks.io)
+    MAIL_FROM_ALERTS    admin and Automatik alerts       (default no-reply@happyhacks.io)
   (or Flask-Mail names: MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD, MAIL_USE_SSL, MAIL_FROM_EMAIL, MAIL_FROM_NAME, MAIL_REPLY_TO)
   TELNYX_API_KEY, and TELNYX_FROM and/or TELNYX_MESSAGING_PROFILE_ID
 
@@ -45,16 +48,31 @@ def _mail():
             'password': g('SMTP_PASSWORD') or g('MAIL_PASSWORD') or '', 'from': sender, 'reply_to': g('MAIL_REPLY_TO')}
 
 
+SENDERS = {'accounts': ('MAIL_FROM_ACCOUNTS', 'accounts@happyhacks.io'),
+           'alerts': ('MAIL_FROM_ALERTS', 'no-reply@happyhacks.io')}
+
+
+def sender_for(kind='accounts', name=None):
+    """The From address for this kind of email: "Happy Hacks <accounts@happyhacks.io>" and so on."""
+    key, default = SENDERS.get(kind, SENDERS['accounts'])
+    v = (settings.get(key) or default).strip()
+    if '<' in v:
+        addr = v.split('<')[-1].strip('> ')
+        return formataddr((name, addr)) if name else v
+    return formataddr((name or settings.get('MAIL_FROM_NAME') or BRAND, v))
+
+
 def email_ready():
     m = _mail()
-    return _log_mode() or bool(m['host'] and m['from'])
+    return _log_mode() or bool(m['host'])
 
 
 def sms_ready():
     return _log_mode() or bool(settings.get('TELNYX_API_KEY') and (settings.get('TELNYX_FROM') or settings.get('TELNYX_MESSAGING_PROFILE_ID')))
 
 
-def send_email(to, subject, text, html=None, from_name=None):
+def send_email(to, subject, text, html=None, from_name=None, kind='accounts'):
+    """kind: 'accounts' (sign-in) or 'alerts' (admin / Automatik) - decides the From address (SENDERS)."""
     if _log_mode():
         log.warning('AUTH_DELIVERY=log, email not sent. To %s: %s\n%s', to, subject, text)
         return
@@ -62,13 +80,11 @@ def send_email(to, subject, text, html=None, from_name=None):
         raise SendError('Email sign-in is not set up on this server yet (SMTP settings).')
     m = _mail()
     msg = EmailMessage()
-    sender = m['from']
-    if from_name:   # e.g. "ZipZip via Happy Hacks": same address, the app's name in the inbox
-        sender = formataddr((from_name, sender.split('<')[-1].strip('> ') if '<' in sender else sender))
+    sender = sender_for(kind, from_name)   # from_name: e.g. "ZipZip via Happy Hacks" - the app's name in the inbox
     msg['From'], msg['To'], msg['Subject'] = sender, to, subject
-    if m['reply_to']:
+    if m['reply_to'] and kind == 'accounts':
         msg['Reply-To'] = m['reply_to']
-    msg['Message-ID'] = make_msgid(domain=m['from'].split('@')[-1].strip('> '))
+    msg['Message-ID'] = make_msgid(domain=sender.split('@')[-1].strip('> '))
     msg.set_content(text)
     if html:
         msg.add_alternative(html, subtype='html')

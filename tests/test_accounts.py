@@ -314,3 +314,14 @@ def test_codes_dont_greet_by_an_email_address(monkeypatch):
     notify.sign_in_message('email', 'busy@example.com', '123456', 'https://x/account/link?t=1', 'login', 'brash@example.com')
     notify.sign_in_message('email', 'pat@example.com', '123456', 'https://x/account/link?t=1', 'login', 'Pat Lee')
     assert not sent[0].startswith('Hi') and sent[1].startswith('Hi Pat,')
+
+
+def test_senders_by_kind(monkeypatch):
+    from happyhacks import notify
+    for k in ('MAIL_FROM_ACCOUNTS', 'MAIL_FROM_ALERTS', 'MAIL_FROM_NAME'):
+        monkeypatch.delenv(k, raising=False)
+    assert notify.sender_for('accounts') == 'Happy Hacks <accounts@happyhacks.io>'
+    assert notify.sender_for('alerts') == 'Happy Hacks <no-reply@happyhacks.io>'
+    assert notify.sender_for('accounts', 'ZipZip via Happy Hacks') == 'ZipZip via Happy Hacks <accounts@happyhacks.io>'
+    monkeypatch.setenv('MAIL_FROM_ALERTS', 'Ops <ops@happyhacks.io>')
+    assert notify.sender_for('alerts') == 'Ops <ops@happyhacks.io>'
