@@ -3,13 +3,15 @@
 {% block content %}
 <section class="page">
   <div class="wrap acct-wide">
-    <p class="eyebrow">Your account{% if is_admin %} · <a href="{{ url_for('admin.dashboard') }}">Admin</a>{% endif %}</p>
-    <h1 class="acct-hello">Hi, {{ user.name.split()[0] }}!</h1>
+    <p class="eyebrow">Your account{% if admin_unlock and admin_unlock.open %} · <a href="{{ url_for('admin.dashboard') }}">Admin</a>{% endif %}</p>
+    <h1 class="acct-hello" id="acct-title">Hi, {{ user.name.split()[0] }}!</h1>
     {% if welcome %}<p class="msg ok">Your Happy Hacks account is ready. Use it to sign in to every Happy Hacks app.</p>{% endif %}
     {% if confirmed %}<p class="msg ok">Confirmed. You can sign in with it now.</p>{% endif %}
     {% if request.args.get('saved') %}<p class="msg ok">Saved.</p>{% endif %}
     {% if request.args.get('others') %}<p class="msg ok">Signed out on every other device.</p>{% endif %}
+    {% if admin_unlock and admin_unlock.locked_notice %}<p class="msg info">Admin locked itself after 30 minutes without use. Unlock it again to keep going.</p>{% endif %}
     {% if error %}<p class="msg err" role="alert">{{ error }}</p>{% endif %}
+    {% if admin_unlock %}{% include "account/_admin_unlock.html" %}{% endif %}
 
     <div class="acct-grid">
       <div class="acct-card">

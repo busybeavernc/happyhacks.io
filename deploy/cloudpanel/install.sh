@@ -135,8 +135,9 @@ else echo "App did not answer on port $APP_PORT. Look at: tail -50 $LOGS/gunicor
 echo
 echo "Done. Site: https://$DOMAIN"
 echo "  HTTPS: in CloudPanel, Sites > $DOMAIN > SSL/TLS > New Let's Encrypt Certificate (once DNS points here)."
-echo "  Admin: https://$DOMAIN/admin"
+echo "  Admin: hidden until unlocked. Set up your authenticator: cd $APP && sudo -u $SITE_USER $VENV/bin/python -m happyhacks.accounts totp you@example.com"
+echo "         then unlock it on https://$DOMAIN/account (see README)."
 if [ -n "$NEW_ADMIN_PW" ]; then
-  echo "  Admin password (also in $APP/.env as ADMIN_PASSWORD):"
+  echo "  Recovery password (only works while ADMIN_RECOVERY=1 in $APP/.env):"
   echo "      $NEW_ADMIN_PW"
 fi

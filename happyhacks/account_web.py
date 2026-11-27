@@ -18,7 +18,7 @@ import secrets
 import time
 from urllib.parse import urlencode, urlsplit, parse_qs
 
-from flask import (Blueprint, current_app, g, jsonify, make_response, redirect, render_template, request, session, url_for)
+from flask import (Blueprint, abort, current_app, g, jsonify, make_response, redirect, render_template, request, session, url_for)
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from . import accounts, sso, themes
@@ -284,15 +284,42 @@ def _redirect(e):
     return redirect(e.to, 303)
 
 
+def _admin_unlock(user):
+    """For administrators only: what the hidden unlock box needs (adminlock.py). Nothing at all for anyone else."""
+    from . import adminlock
+    if user.get('role') != 'admin':
+        return None
+    return {'keys': adminlock.unlock_keys(), 'open': adminlock.unlocked(), 'has_totp': adminlock.has_totp(user),
+            'locked_notice': request.args.get('admin') == 'locked',
+            'contact': user.get('email') or user.get('phone') or user['id']}
+
+
 def _home(user, status=200, **kw):
     apps = [p for p in PRODUCTS if p.get('url')]
-    return _page('account/home.html', status, user=accounts.public(user), is_admin=user.get('role') == 'admin', apps=apps, devices=len(accounts.sessions_of(user['id'])),
+    return _page('account/home.html', status, user=accounts.public(user), admin_unlock=_admin_unlock(user), apps=apps, devices=len(accounts.sessions_of(user['id'])),
                  adding=session.get('a_add'), welcome=request.args.get('welcome'), confirmed=request.args.get('confirmed'), **kw)
 
 
 @bp.get('')
 def home():
     return _home(_need_user())
+
+
+@bp.post('/admin-unlock')
+def admin_unlock():
+    """The hidden code box on /account (administrators only; see adminlock.py). Anyone else: a plain 404."""
+    from . import adminlock
+    user = current_user()
+    if not user or user.get('role') != 'admin':
+        abort(404)
+    try:
+        _check_csrf()
+    except accounts.AuthError as e:
+        return _home(user, 400, error=str(e))
+    problem = adminlock.try_unlock(request.form.get('code', ''))
+    if problem:
+        return _home(user, 400, error=problem)
+    return redirect(url_for('admin.dashboard'), 303)
 
 
 @bp.post('/name')

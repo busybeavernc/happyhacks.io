@@ -22,6 +22,7 @@ Keeping strangers from being spammed through the form (same rules as zipzip):
     python -m happyhacks.accounts list                       accounts
     python -m happyhacks.accounts import-zipzip users.json   copy zipzip's accounts in (same ids, contacts, confirmations)
     python -m happyhacks.accounts admin|unadmin <email|phone|id>     Happy Hacks administrators (happyhacks.io/admin)
+    python -m happyhacks.accounts totp|totp-off <email|phone|id>     their authenticator, for unlocking admin (adminlock.py)
     python -m happyhacks.accounts suspend|unsuspend <email|phone|id>
 """
 import hashlib
@@ -84,7 +85,12 @@ SQLITE = [
 
 # a Happy Hacks-only role: 'admin' opens happyhacks.io/admin. It is never sent to apps (public() leaves it out) and no
 # app's role ever comes in; each app keeps its own.
-MIGRATIONS = ["ALTER TABLE users ADD COLUMN role VARCHAR(16) NOT NULL DEFAULT 'user'"]
+MIGRATIONS = ["ALTER TABLE users ADD COLUMN role VARCHAR(16) NOT NULL DEFAULT 'user'",
+              # the authenticator that unlocks happyhacks.io/admin (adminlock.py); never sent to apps
+              "ALTER TABLE users ADD COLUMN totp_secret VARCHAR(64) NOT NULL DEFAULT ''",
+              "ALTER TABLE users ADD COLUMN totp_last_step BIGINT NOT NULL DEFAULT 0",
+              "CREATE TABLE IF NOT EXISTS admin_events (at DOUBLE NOT NULL, kind VARCHAR(32) NOT NULL, ref VARCHAR(64) NOT NULL)",
+              "CREATE INDEX idx_admin_events ON admin_events (kind, ref, at)"]
 
 
 class AuthError(Exception):
@@ -538,6 +544,47 @@ def import_users(rows):
     return {'added': added, 'same': same, 'skipped': skipped}
 
 
+def _totp_cli(cmd, who):
+    """Set up (or remove) the authenticator that unlocks happyhacks.io/admin. Server-only on purpose (adminlock.py)."""
+    from . import adminlock
+    u = get_user(who)
+    if not u:
+        try:
+            u = owner_of(*parse_contact(who))
+        except AuthError:
+            u = None
+    if not u:
+        print('No Happy Hacks account with that email, number or id.')
+        return 1
+    account = u.get('email') or u.get('phone') or u['id']
+    if cmd == 'totp-off':
+        db().run("UPDATE users SET totp_secret='', totp_last_step=0 WHERE id=%s", (u['id'],))
+        adminlock.alert(u, f'Admin authenticator removed for {account}', 'Removed on the server. Admin stays locked for '
+                                                                          'them until a new one is set up.')
+        print(f"Authenticator removed for {account}. They can't unlock admin until it's set up again.")
+        return 0
+    if u.get('role') != 'admin':
+        print(f"{account} isn't a Happy Hacks administrator. First: python -m happyhacks.accounts admin {who}")
+        return 1
+    secret = adminlock.new_secret()
+    db().run('UPDATE users SET totp_secret=%s, totp_last_step=0 WHERE id=%s', (secret, u['id']))
+    adminlock.alert(u, f'Admin authenticator set up for {account}', 'Set up on the server. Any earlier one stopped working.')
+    uri = adminlock.setup_uri(secret, account)
+    print(f'Authenticator set up for {account} (any earlier one stops working).')
+    print('In your authenticator app (Google Authenticator, 1Password, Authy...), add an account with this setup key:')
+    print(f'\n    {" ".join(secret[i:i + 4] for i in range(0, len(secret), 4))}\n')
+    print(f'or open/scan this link:\n    {uri}\n')
+    try:
+        import qrcode
+        q = qrcode.QRCode(border=1)
+        q.add_data(uri)
+        q.print_ascii(invert=True)
+    except ImportError:
+        pass
+    print('Then on happyhacks.io/account, type the unlock word (or tap the heading 5 times) and enter the 6-digit code.')
+    return 0
+
+
 def _main(argv):
     cmd = argv[0] if argv else 'list'
     if cmd == 'list':
@@ -568,8 +615,15 @@ def _main(argv):
             print('No Happy Hacks account with that email, number or id. They need to sign up first.')
             return 1
         set_role(u['id'], 'admin' if cmd == 'admin' else 'user')
+        from . import adminlock
+        adminlock.alert(u, f"{u['name']} {'is now' if cmd == 'admin' else 'is no longer'} a Happy Hacks administrator",
+                        f"Changed on the server with: python -m happyhacks.accounts {cmd} {argv[1]}")
         print(f"{u['name']} is {'now a Happy Hacks administrator' if cmd == 'admin' else 'no longer a Happy Hacks administrator'}.")
+        if cmd == 'admin':
+            print(f'Next: python -m happyhacks.accounts totp {argv[1]}   (admin stays locked without an authenticator)')
         return 0
+    if cmd in ('totp', 'totp-off') and len(argv) > 1:
+        return _totp_cli(cmd, argv[1])
     if cmd in ('suspend', 'unsuspend') and len(argv) > 1:
         u = get_user(argv[1])
         if not u:

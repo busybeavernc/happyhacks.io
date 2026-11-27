@@ -39,7 +39,7 @@
 
   async function api(path, method = 'GET') {
     const r = await fetch(path, { method, headers: { 'X-CSRF-Token': CSRF }, credentials: 'same-origin' });
-    if (r.status === 401) { location.href = '/admin/login'; throw new Error('signed out'); }
+    if (r.status === 401) { location.href = '/account?admin=locked'; throw new Error('signed out'); }
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || `Request failed (${r.status})`);
     return d;

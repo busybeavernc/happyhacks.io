@@ -1,24 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Admin sign in · {{ site_name }}{% endblock %}
+{% block title %}Admin recovery · {{ site_name }}{% endblock %}
 {% block content %}
 <section class="page">
   <div class="wrap admin-narrow">
     <div class="admin-card">
       <img class="admin-mark" src="{{ asset('favicon.svg') }}" alt="" width="44" height="44">
-      <h1 class="admin-title">Admin</h1>
+      <h1 class="admin-title">Admin recovery</h1>
+      <p class="msg info">Recovery sign-in is on (ADMIN_RECOVERY in .env). Every use is emailed to the administrators.
+        Turn it off again as soon as you're back in.</p>
       {% if error %}<p class="msg err">{{ error }}</p>{% endif %}
-      {% if not_admin %}<p class="msg info">You're signed in as {{ not_admin }}, which isn't a Happy Hacks administrator.</p>{% endif %}
-      <a class="btn admin-wide" href="{{ url_for('account.signin', next='/admin') }}">Sign in with Happy Hacks</a>
-      {% if password_on %}
-      <details class="admin-backup" {% if error %}open{% endif %}>
-        <summary>Use the admin password instead</summary>
-        <form method="post" action="{{ url_for('admin.login') }}">
-          <label for="pw">Admin password</label>
-          <input id="pw" name="password" type="password" autocomplete="current-password" required>
-          <button class="btn" type="submit">Sign in</button>
-        </form>
-      </details>
-      {% endif %}
+      <form method="post" action="{{ url_for('admin.login') }}">
+        <label for="pw">Admin password</label>
+        <input id="pw" name="password" type="password" autocomplete="current-password" required>
+        <button class="btn" type="submit">Sign in</button>
+      </form>
     </div>
   </div>
 </section>

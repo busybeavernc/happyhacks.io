@@ -54,14 +54,18 @@ The first run creates a deploy key (`~/.ssh/happyhacks_deploy`) and prints it; a
 
 `https://happyhacks.io/admin` lets you run the deploy from the browser and watch its output, like ZipZip's dashboard.
 
-- **Sign-in:** with a Happy Hacks account that has the **admin** role (the normal sign-in; admins go straight in, other
-  accounts are turned away). Make an account an administrator, once it exists:
+- **Hidden:** every `/admin` address answers 404 until an administrator unlocks it. Set up their authenticator on the
+  server with `python -m happyhacks.accounts totp you@example.com` (`totp-off` removes it). Then, signed in, on
+  `/account` type the unlock word (`ADMIN_UNLOCK_KEYS`, default `unlock`) within 10 seconds of the page loading, or tap
+  the "Hi, ..." heading 5 times, and enter the 6-digit code. Admin stays open in that browser for 30 minutes after the
+  last use (12 hours at most). Unlocks, blocked unlocks, recovery sign-ins, a new network address, website updates and
+  administrator/authenticator changes are emailed to `ADMIN_ALERT_EMAIL` and the administrator.
+- **Who:** a Happy Hacks account with the **admin** role. Make an account an administrator, once it exists:
   `python -m happyhacks.accounts admin you@example.com` (or `unadmin`; `list` shows roles), or put the address in
   `ADMIN_CONTACTS=` in `.env` and it becomes one at its next sign-in. The role is **Happy Hacks only**: it is never sent
   to ZipZip or other apps, and their roles never come in.
-- **Backup:** `ADMIN_PASSWORD` in `.env` ("Use the admin password instead"), e.g. if email sign-in is down. `install.sh`
-  generates one the first time and prints it; empty it to turn the password off. Five wrong tries lock that IP out for
-  15 minutes. After changing it: `sudo supervisorctl restart happyhacks`.
+- **Recovery:** `ADMIN_PASSWORD` in `.env` works on `/admin/login` only while `ADMIN_RECOVERY=1` is also set (e.g.
+  if email sign-in is down). Switch it on, get in, switch it off. Every use is emailed.
 - **Update live site** runs `sudo -n /usr/local/sbin/happyhacks-deploy` in its own session, so it survives the app restarting mid-deploy. `install.sh` writes `/etc/sudoers.d/happyhacks-deploy`, which allows the site user to run that one command as root and nothing else.
 - Update logs: `~/logs/happyhacks-updates/` (site user's home).
 

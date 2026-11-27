@@ -1,7 +1,9 @@
 """/admin: run the deploy and watch its output.
 
-Two ways in: a Happy Hacks account with the admin role (python -m happyhacks.accounts admin <email>, or ADMIN_CONTACTS),
-signed in the normal way; or ADMIN_PASSWORD from .env, kept as a backup (for example if email sign-in is down).
+Hidden: every /admin address answers 404 until it's unlocked (see adminlock.py). Ways in:
+  - a Happy Hacks account with the admin role (python -m happyhacks.accounts admin <email>, or ADMIN_CONTACTS) that
+    unlocks admin on /account with a code from its authenticator app
+  - recovery only: ADMIN_PASSWORD, accepted on /admin/login only while ADMIN_RECOVERY=1 is also in .env
 The admin role is Happy Hacks-only: apps never see it."""
 import hmac
 import os
@@ -9,14 +11,13 @@ import secrets
 import time
 from functools import wraps
 
-from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, jsonify, redirect, render_template, request, session, url_for
 
-from . import selfupdate
+from . import adminlock, selfupdate
 
 bp = Blueprint('admin', __name__)
 
 SESSION_HOURS = 12
-_failures = {}   # ip -> [timestamps]; per worker, enough to slow down password guessing
 
 
 def _password():
@@ -27,21 +28,35 @@ def _client_ip():
     return request.remote_addr or '?'   # ProxyFix makes this the visitor's address behind nginx
 
 
-def _locked(ip):
-    now = time.time()
-    recent = [t for t in _failures.get(ip, []) if now - t < 900]
-    _failures[ip] = recent
-    return len(recent) >= 5
-
-
 def _password_session():
-    return bool(session.get('admin')) and time.time() - session.get('at', 0) < SESSION_HOURS * 3600
+    """Signed in with the recovery password (only counts while ADMIN_RECOVERY is on)."""
+    return adminlock.recovery_on() and bool(session.get('admin')) and \
+        time.time() - session.get('at', 0) < SESSION_HOURS * 3600
 
 
 def _account_admin():
+    """The signed-in administrator, if they've unlocked admin in this browser."""
     from .account_web import current_user
     u = current_user()
-    return u if u and u.get('role') == 'admin' else None
+    return u if u and u.get('role') == 'admin' and adminlock.unlocked() else None
+
+
+@bp.before_request
+def hidden():
+    """/admin doesn't exist until it's unlocked. An administrator whose unlock ran out is sent back to unlock it;
+    anyone else gets the site's ordinary 404."""
+    if _password_session():
+        return None
+    if adminlock.unlocked():
+        adminlock.touch()
+        return None
+    if request.path == '/admin/login' and adminlock.recovery_on():
+        return None
+    if adminlock.expired_for_admin():
+        if request.path.startswith('/admin/api/'):
+            return jsonify(error='Admin locked itself after 30 minutes. Unlock it again from your account page.'), 401
+        return redirect(url_for('account.home', admin='locked'))
+    abort(404)
 
 
 def _signed_in():
@@ -69,42 +84,34 @@ def login_required(view):
 
 @bp.route('/admin/login', methods=['GET', 'POST'])
 def login():
-    from .account_web import current_user
+    """Recovery sign-in with ADMIN_PASSWORD (reachable only while ADMIN_RECOVERY=1)."""
     if request.method == 'GET' and _signed_in():
         return redirect(url_for('admin.dashboard'))
-    u = current_user()
-    not_admin = u['name'] if u and u.get('role') != 'admin' else None
     error = None
-    if request.method == 'POST' and not _password():
-        error = 'The admin password is turned off (ADMIN_PASSWORD is empty in .env). Sign in with an administrator account.'
-    elif request.method == 'POST':
+    if request.method == 'POST':
         ip = _client_ip()
-        if _locked(ip):
+        if adminlock.recovery_failures(ip) >= adminlock.FAILS_ALLOWED:
             error = 'Too many tries. Wait 15 minutes and try again.'
         elif hmac.compare_digest(request.form.get('password', '').encode(), _password().encode()):
-            _failures.pop(ip, None)
+            adminlock.note_recovery(True, ip)
             session.clear()
             session.permanent = True
             session.update(admin=True, at=time.time(), csrf=secrets.token_urlsafe(24))
             return redirect(url_for('admin.dashboard'))
         else:
-            _failures.setdefault(ip, []).append(time.time())
+            adminlock.note_recovery(False, ip)
             error = 'That password is not right.'
-    return render_template('admin_login.html', error=error, not_admin=not_admin, password_on=bool(_password())), \
-        (429 if error and 'Too many' in error else 200)
+    return render_template('admin_login.html', error=error), (429 if error and 'Too many' in error else 200)
 
 
 @bp.post('/admin/logout')
 def logout():
-    """Signs out of /admin; an account administrator is signed out of their Happy Hacks account too."""
-    from . import accounts
-    from .account_web import SESSION_COOKIE
-    if request.form.get('csrf') and hmac.compare_digest(request.form.get('csrf', ''), session.get('csrf', '')) and _account_admin():
-        accounts.end_session(request.cookies.get(SESSION_COOKIE))
-    session.clear()
-    resp = redirect(url_for('admin.login'))
-    resp.delete_cookie(SESSION_COOKIE, path='/')
-    return resp
+    """Locks admin again (and ends a recovery sign-in). The Happy Hacks account stays signed in."""
+    if request.form.get('csrf') and hmac.compare_digest(request.form.get('csrf', ''), session.get('csrf', '')):
+        session.pop('admin', None)
+        session.pop('at', None)
+        adminlock.lock()
+    return redirect(url_for('account.home'))
 
 
 @bp.get('/admin')
@@ -130,6 +137,8 @@ def update_run():
         pid = selfupdate.start(_who())
     except selfupdate.UpdateError as e:
         return jsonify(error=str(e)), 409
+    adminlock.alert(_account_admin(), f'{_who()} started a website update',
+                    f'{_who()} started a happyhacks.io update from {_client_ip()} at {adminlock._when(time.time())}.')
     return jsonify(ok=True, pid=pid)
 
 

@@ -4,20 +4,20 @@ import time
 import unittest
 from unittest import mock
 
-from happyhacks import accounts, admin, create_app
+from happyhacks import accounts, adminlock, create_app
 
 
 class AdminTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.env = mock.patch.dict(os.environ, {
-            'ADMIN_PASSWORD': 'test-pw', 'DATA_DIR': self.tmp.name, 'SECRET_KEY': 'test-secret', 'DB_NAME': '', 'AUTH_DELIVERY': 'log',
+            'ADMIN_PASSWORD': 'test-pw', 'ADMIN_RECOVERY': '1', 'ADMIN_ALERT_EMAIL': 'alerts@example.com', 'DATA_DIR': self.tmp.name, 'SECRET_KEY': 'test-secret', 'DB_NAME': '', 'AUTH_DELIVERY': 'log',
             'UPDATES_DIR': self.tmp.name,
             'UPDATE_COMMAND': 'echo deploying; echo done',
         })
         self.env.start()
         accounts.reset()
-        admin._failures.clear()
+        adminlock.sent.clear()
         app = create_app()
         app.config['SESSION_COOKIE_SECURE'] = False
         self.c = app.test_client()
@@ -33,9 +33,9 @@ class AdminTests(unittest.TestCase):
             return s['csrf']
 
     def test_requires_sign_in(self):
-        self.assertEqual(self.c.get('/admin').status_code, 302)
-        self.assertEqual(self.c.get('/admin/api/updates').status_code, 401)
-        self.assertEqual(self.c.post('/admin/api/updates').status_code, 401)
+        self.assertEqual(self.c.get('/admin').status_code, 404)
+        self.assertEqual(self.c.get('/admin/api/updates').status_code, 404)
+        self.assertEqual(self.c.post('/admin/api/updates').status_code, 404)
 
     def test_wrong_password_and_lockout(self):
         for _ in range(5):
@@ -43,14 +43,22 @@ class AdminTests(unittest.TestCase):
         r = self.c.post('/admin/login', data={'password': 'test-pw'})
         self.assertEqual(r.status_code, 429)
 
-    def test_password_off_leaves_account_sign_in(self):
-        with mock.patch.dict(os.environ, {'ADMIN_PASSWORD': ''}):
-            page = self.c.get('/admin/login').get_data(as_text=True)
-            self.assertIn('Sign in with Happy Hacks', page)
-            self.assertNotIn('Admin password', page)
-            r = self.c.post('/admin/login', data={'password': ''})
-            self.assertIn(b'turned off', r.data)
-            self.assertEqual(self.c.get('/admin').status_code, 302)
+    def test_password_is_off_without_recovery(self):
+        with mock.patch.dict(os.environ, {'ADMIN_RECOVERY': '0'}):
+            self.assertEqual(self.c.get('/admin/login').status_code, 404)
+            self.assertEqual(self.c.post('/admin/login', data={'password': 'test-pw'}).status_code, 404)
+        self.sign_in()
+        self.assertEqual(self.c.get('/admin').status_code, 200)
+        self.assertTrue(any('recovery password was used' in m['subject'] for m in adminlock.sent))
+        with mock.patch.dict(os.environ, {'ADMIN_RECOVERY': '0'}):
+            self.assertEqual(self.c.get('/admin').status_code, 404)    # switched off: the session stops working
+
+    def test_totp_matches_rfc_6238(self):
+        secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
+        self.assertEqual(adminlock.code_at(secret, 59 // 30), '287082')
+        self.assertEqual(adminlock.code_at(secret, 1111111109 // 30), '081804')
+        self.assertEqual(adminlock.check_code(secret, '287 082', 0, now=59), 1)
+        self.assertIsNone(adminlock.check_code(secret, '287082', 1, now=59))
 
     def account(self, email, role=None):
         u = accounts.create_user('Pat Admin', 'email', email)
@@ -59,22 +67,66 @@ class AdminTests(unittest.TestCase):
         self.c.set_cookie('hh_session', accounts.new_session(u['id']))
         return u
 
-    def test_account_admin_goes_straight_in(self):
-        self.account('pat@example.com', 'admin')
-        self.assertEqual(self.c.get('/admin/login').status_code, 302)
+    def totp(self, u):
+        import contextlib, io
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(accounts._main(['totp', u['email']]), 0)
+        return accounts.db().run('SELECT totp_secret FROM users WHERE id=%s', (u['id'],), fetch='one')['totp_secret']
+
+    def unlock(self, secret, step=None):
+        self.c.get('/account')
+        with self.c.session_transaction() as s:
+            csrf = s['csrf']
+        code = adminlock.code_at(secret, step if step is not None else int(time.time() // 30))
+        return self.c.post('/account/admin-unlock', data={'csrf': csrf, 'code': code})
+
+    def test_account_admin_unlocks_with_authenticator(self):
+        u = self.account('pat@example.com', 'admin')
+        self.assertEqual(self.c.get('/admin').status_code, 302)                # locked: back to /account
+        page = self.c.get('/account').get_data(as_text=True)
+        self.assertIn('id="admin-unlock"', page)
+        self.assertIn('python -m happyhacks.accounts totp pat@example.com', page)   # no authenticator yet
+        self.assertNotIn('>Admin</a>', page)
+        secret = self.totp(u)
+        self.assertIn('Authenticator code', self.c.get('/account').get_data(as_text=True))
+        r = self.unlock(secret)
+        self.assertEqual(r.status_code, 303)
+        self.assertTrue(r.headers['Location'].endswith('/admin'))
+        self.assertTrue(any('Admin was unlocked' in m['subject'] for m in adminlock.sent))
         page = self.c.get('/admin').get_data(as_text=True)
         self.assertIn('Pat Admin', page)
         with self.c.session_transaction() as s:
             csrf = s['csrf']
         r = self.c.post('/admin/api/updates', headers={'X-CSRF-Token': csrf})
         self.assertEqual(r.status_code, 200, r.data)
-        self.assertIn('Admin', self.c.get('/account').get_data(as_text=True))
-
-    def test_ordinary_account_is_turned_away(self):
-        self.account('sam@example.com')
-        self.assertEqual(self.c.get('/admin').status_code, 302)
+        self.assertTrue(any('started a website update' in m['subject'] for m in adminlock.sent))
+        self.assertIn('>Admin</a>', self.c.get('/account').get_data(as_text=True))
+        # 30 minutes without use: locked again, and the old code can't be reused
+        with self.c.session_transaction() as s:
+            s['admin_unlock'] = {**s['admin_unlock'], 'until': time.time() - 1}
+        self.assertIn('admin=locked', self.c.get('/admin').headers['Location'])
         self.assertEqual(self.c.get('/admin/api/updates').status_code, 401)
-        self.assertIn("isn't a Happy Hacks administrator", self.c.get('/admin/login').get_data(as_text=True))
+        self.assertIn('didn&#39;t work', self.unlock(secret).get_data(as_text=True))
+
+    def test_wrong_codes_block_unlocking(self):
+        u = self.account('pat@example.com', 'admin')
+        secret = self.totp(u)
+        self.c.get('/account')
+        with self.c.session_transaction() as s:
+            csrf = s['csrf']
+        for _ in range(5):
+            self.c.post('/account/admin-unlock', data={'csrf': csrf, 'code': '000000'})
+        self.assertTrue(any('blocked after wrong codes' in m['subject'] for m in adminlock.sent))
+        self.assertIn('Too many wrong codes', self.unlock(secret).get_data(as_text=True))
+
+    def test_ordinary_account_sees_nothing(self):
+        self.account('sam@example.com')
+        self.assertEqual(self.c.get('/admin').status_code, 404)
+        self.assertEqual(self.c.get('/admin/api/updates').status_code, 404)
+        self.assertNotIn('admin-unlock', self.c.get('/account').get_data(as_text=True))
+        with self.c.session_transaction() as s:
+            csrf = s['csrf']
+        self.assertEqual(self.c.post('/account/admin-unlock', data={'csrf': csrf, 'code': '123456'}).status_code, 404)
 
     def test_admin_contacts_and_command(self):
         with mock.patch.dict(os.environ, {'ADMIN_CONTACTS': 'Boss+x@Example.com'}):
